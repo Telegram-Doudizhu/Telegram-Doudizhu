@@ -15,33 +15,43 @@ class Card:
       self.idx = idx
     elif type(idx) is str:
       idx = idx.upper()
-      if idx in [str(i) for i in range(3, 10+1)]:
+      if idx in [str(i) for i in range(3, 9+1)]:
         self.idx = int(idx)
+      elif idx == '0':
+        self.idx = 10
       elif idx in ['J', 'Q', 'K']:
         self.idx = 11 if idx == 'J' else 12 if idx == 'Q' else 13
       elif idx in ['A', '2']:
         self.idx = 21 if idx == 'A' else 22
-      elif idx in ['BK', 'XW']:
+      elif idx in ['BK', 'B', 'XW']:
         self.idx = 31
-      elif idx in ['RK', 'DW']:
+      elif idx in ['RK', 'R', 'DW']:
         self.idx = 32
       else:
         raise RuntimeError('Internal error')
     else:
       raise RuntimeError('Internal error')
 
-  # card sorting
+  # card sorting (NOT IDX)
   def __lt__(self, other):
+    if type(other) is int:
+      return self.idx < other.idx
     # color TODO
     return self.idx < other.idx
 
-  # card equality
+  # card equality (NOT IDX)
   def __eq__(self, other):
+    if type(other) is int:
+      return self.idx == other.idx
     # color TODO
     return self.idx == other.idx
 
   # get card idx
   def get_idx(self) -> int:
+    return self.idx
+
+  # get card idx
+  def __int__(self):
     return self.idx
 
   # card shown
