@@ -36,6 +36,7 @@ async def inline_query() -> None:
 
 
 if __name__ == '__main__':
+    '''
     bot_app = Application.builder().token(TOKEN).build()
 
     bot_app.add_handler(CommandHandler("new", new_game))
@@ -46,17 +47,18 @@ if __name__ == '__main__':
     bot_app.add_handler(InlineQueryHandler(inline_query))
 
     bot_app.run_polling()
+    '''
 
-    # d = Deck()
-    # print([str(i) for i in d.pcards])
-    # print(str(d.tcards))
-    # d.decide_lord(2)
-    # while True:
-    #   print(f'player {d.get_cur()} card {d.get_cards()}')
-    #   c = Cards([Card(s) for s in input(f'Play{d.get_cur()} > ')])
-    #   while not d.check_playable(c):
-    #     c = Cards([Card(s) for s in input(f'Play{d.get_cur()} > ')])
-    #   d.do_play(c); print(f'player {d.get_lastcur()} left {d.get_lastleft()}')
-    #   if not d.get_lastleft():
-    #     break
-    # print('Finished')
+    d = Deck()
+    print([repr(i) for i in d.pcards])
+    print(repr(d.tcards))
+    d.decide_lord(2)
+    while True:
+        print(f'player {d.get_cur()} card {repr(d.get_cards())}')
+        c = Cards([Card(s) for s in input(f'Play{d.get_cur()} > ').split(' ')])
+        while not d.check_playable(c):
+            c = Cards([Card(s) for s in input(f'Play{d.get_cur()} > ').split(' ')])
+        d.do_play(c); print(f'player {d.get_lastcur()} left {d.get_lastleft()}')
+        if not d.get_lastleft():
+            break
+    print('Finished')
