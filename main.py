@@ -1,8 +1,9 @@
 from config import TOKEN
 
-from cls.deck import Deck
 from cls.card import Card
 from cls.cards import Cards
+from cls.deck import Deck
+from fun.cards import *
 
 from telegram import Update
 from telegram.ext import Application, CommandHandler, InlineQueryHandler, ContextTypes
@@ -55,9 +56,9 @@ if __name__ == '__main__':
     d.decide_lord(2)
     while True:
         print(f'player {d.get_cur()} card {repr(d.get_cards())}')
-        c = Cards([Card(s) for s in input(f'Play{d.get_cur()} > ').split(' ')])
-        while not d.check_playable(c):
-            c = Cards([Card(s) for s in input(f'Play{d.get_cur()} > ').split(' ')])
+        c = Cards.from_cardlist(input(f'Play{d.get_cur()} > '), d.get_cards())
+        while c is False or not d.check_playable(c):
+            c =  Cards.from_cardlist(input(f'Play{d.get_cur()} > '), d.get_cards())
         d.do_play(c); print(f'player {d.get_lastcur()} left {d.get_lastleft()}')
         if not d.get_lastleft():
             break

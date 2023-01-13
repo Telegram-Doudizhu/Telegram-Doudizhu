@@ -1,10 +1,11 @@
+from cls.error import InternalError
 from cls.card import Card
 
 class Cards:
     '''
         Cards consisting of Card
     '''
-    __slots__ = ('cards',)
+    __slots__ = ('cards', )
 
 class Cards:
 
@@ -17,7 +18,7 @@ class Cards:
         elif type(cards) is Cards:
             self.cards = sorted(cards.cards)
         else:
-            raise RuntimeError('Invalid parameter type')
+            raise InternalError('Invalid parameter type')
 
     # check card combination
     # see https://github.com/mnihyc/CCDDZ/blob/master/g_card.h
@@ -28,7 +29,7 @@ class Cards:
         '''
         cards = self.cards
         if len(cards) < 2:
-            raise RuntimeError('Cards not enough')
+            raise InternalError('Cards not enough')
         for i in range(1, min(cnt, len(cards))):
             if int(cards[i-1]) != int(cards[i]):
                 return False
@@ -40,7 +41,7 @@ class Cards:
         '''
         cards = self.cards
         if len(cards) < 2:
-            raise RuntimeError('Cards not enough')
+            raise InternalError('Cards not enough')
         for i in range(1, min(cnt, len(cards))):
             # includes K A ; excludes A 2
             if int(cards[i-1])+1 != int(cards[i]) \
@@ -83,21 +84,21 @@ class Cards:
                 return [1, 6, spt[3][0]] # 3/1
             if lc==5 and len(spt[2])==1:
                 return [1, 7, spt[3][0]] # 3/2
-        if len(spt[3])==2 and spt[3].__check_continuous(2):
+        if len(spt[3])==2 and spt[3]._check_continuous(2):
             if lc==6:
                 return [1, 8, spt[3][0]] # 2x Triple
             if lc==8 and (len(spt[1])==2 or len(spt[2])==1):
                 return [1, 9, spt[3][0]] # 3/3/1+1
             if lc==10 and len(spt[2])==2:
                 return [1, 10, spt[3][0]] # 3/3/2/2
-        if len(spt[3])==3 and spt[3].__check_continuous(3):
+        if len(spt[3])==3 and spt[3]._check_continuous(3):
             if lc==9:
                 return [1, 11, spt[3][0]] # 3x Triple
             if lc==12 and (len(spt[1])==3 or (len(spt[2])==1 and len(spt[1])==1)):
                 return [1, 12, spt[3][0]] # 3x 3 / 1+2|1+1+1
             if lc==15 and len(spt[2])==3:
                 return [1, 13, spt[3][0]] # 3x 3 / 3x 2
-        if len(spt[3])==4 and spt[3].__check_continuous(4):
+        if len(spt[3])==4 and spt[3]._check_continuous(4):
             if lc==12:
                 return [1, 14, spt[3][0]] # 4x Triple
             if lc==16 and (len(spt[1])==4 or len(spt[2])==2 or (len(spt[1])==1 and len(spt[3])==1)):
@@ -112,10 +113,10 @@ class Cards:
         if len(spt[4])==2 and lc==8:
             return [1, 18, spt[4][1]] # 4/2/2
         if lc>=5 and len(spt[2])==0 and len(spt[3])==0 and len(spt[4])==0:
-            if spt[1].__check_continuous():
+            if spt[1]._check_continuous():
                 return [1, 19+lc-5, spt[1][0]] # ~
         if lc>=6 and len(spt[1])==0 and len(spt[3])==0 and len(spt[4])==0:
-            if spt[2].__check_continuous():
+            if spt[2]._check_continuous():
                 return [1, 27+lc//2-3, spt[2][0]] # ~~
         return [0, 0, 0] # empty or invalid
 
@@ -131,21 +132,21 @@ class Cards:
                 return False
         return t1[1] == t2[1] and int(t1[2]) < int(t2[2])
 
-    def do_play(self, cards:Cards|list[Card]) -> None:
+    def do_remove(self, cards:Cards|list[Card]) -> None:
         '''
-            play cards
+            remove cards
         '''
         if type(cards) is list and all(type(card) is Card for card in cards):
             pass
         elif type(cards) is Cards:
             cards = cards.cards
         else:
-            raise RuntimeError('Invalid parameter type')
+            raise InternalError('Invalid parameter type')
         for card in cards:
             try:
                 self.cards.remove(card)
             except ValueError:
-                raise RuntimeError('Card not found')
+                raise InternalError('Card not found')
 
     def do_add(self, cards:Cards|list[Card]) -> None:
         '''
@@ -156,13 +157,19 @@ class Cards:
         elif type(cards) is Cards:
             cards = cards.cards
         else:
-            raise RuntimeError('Invalid parameter type')
+            raise InternalError('Invalid parameter type')
         self.cards.extend(cards)
         self.cards.sort()
 
+    def get_cards(self) -> list[Card]:
+        '''
+            get cards
+        '''
+        return self.cards
+
     def __contains__(self, cards:Cards|list[Card]|Card) -> bool:
         '''
-        whether contains (in self)
+            whether contains (in self)
         '''
         if type(cards) is Card:
             return cards in self.cards
@@ -173,7 +180,7 @@ class Cards:
                 if card not in self.cards:
                     return False
         else:
-            raise RuntimeError('Invalid parameter type')
+            raise InternalError('Invalid parameter type')
         return True
 
     def get_left(self) -> int:
@@ -185,13 +192,13 @@ class Cards:
     def __str__(self):
         '''
             get cards string
-            format: 390JB
+            format: '390JB'
         '''
         return ''.join(self.get_cards_str())
 
     def get_cards_str(self) -> list[str]:
         '''
-                get cards string list
+            get cards string list
             format: ['3','9','0','J','B']
         '''
         return [str(card) for card in self.cards]
@@ -199,7 +206,7 @@ class Cards:
     def __repr__(self):
         '''
             get cards string
-            format: 3C 9H 10D JS B
+            format: '3C 9H 10D JS B'
         '''
         return ' '.join(self.get_cards_repr())
     
@@ -215,7 +222,7 @@ class Cards:
             rewrite [] by index
         '''
         if not (0 <= idx < len(self.cards)):
-            raise RuntimeError('Invalid card index')
+            raise InternalError('Invalid card index')
         return self.cards[idx]
 
     def __len__(self):

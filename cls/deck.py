@@ -1,4 +1,5 @@
 import random
+from cls.error import InternalError
 from cls.card import Card
 from cls.cards import Cards
 
@@ -6,7 +7,7 @@ class Deck:
     '''
         Card deck
     '''
-    __slots__ = ('tcards', 'pcards', 'cur', 'last', 'must',)
+    __slots__ = ('tcards', 'pcards', 'cur', 'last', 'must', )
 
     # initial card deck
     deck_cardstr = '34567890JQKA2'
@@ -52,7 +53,7 @@ class Deck:
     def get_cards(self, cur:int|None = None) -> Cards:
         '''
             get player cards
-            cur: index int; None (default) for current
+            cur: int index; None (default) for current
         '''
         if cur is None:
             cur = self.cur
@@ -63,7 +64,7 @@ class Deck:
             allocate top cards to player lord
         '''
         if self.lord_decided() or not (0 <= idx < 3):
-            raise RuntimeError('Invalid call or parameter given')
+            raise InternalError('Invalid call or parameter given')
         self.cur = idx
         self.pcards[idx].do_add(self.tcards)
         self.tcards = None
@@ -88,13 +89,13 @@ class Deck:
             (must be called after check_playable())
         '''
         if not self.lord_decided():
-            raise RuntimeError('Lord is not decided')
+            raise InternalError('Lord is not decided')
         if len(cards) == 0: # skip
             self.must += 1
             if self.must == 2:
                 self.last = Cards([]) # reset last
         else:
             self.must = 0
-            self.pcards[self.cur].do_play(cards)
+            self.pcards[self.cur].do_remove(cards)
             self.last = cards
         self.cur = (self.cur + 1) % 3

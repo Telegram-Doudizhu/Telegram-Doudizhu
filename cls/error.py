@@ -1,0 +1,2 @@
+class InternalError(RuntimeError):
+    pass
