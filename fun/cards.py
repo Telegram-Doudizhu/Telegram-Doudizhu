@@ -84,4 +84,4 @@ def from_cardlist(cls:Cards, cardlist:list[str]|str, cards:Cards|None = None) ->
 Cards.from_cardlist = from_cardlist
 
 
-__all__ = ('split_cardstr', )
+__all__ = ()

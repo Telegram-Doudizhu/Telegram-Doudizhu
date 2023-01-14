@@ -1,54 +1,24 @@
-from config import TOKEN
-
 from cls.card import Card
 from cls.cards import Cards
 from cls.deck import Deck
 from fun.cards import *
 
-from telegram import Update
-from telegram.ext import Application, CommandHandler, InlineQueryHandler, ContextTypes
+import config
+from fun.bot import start_bot
 
-# Local test (using socks5 proxy)
-#   - install with 'pip install Pysocks'
-# import socks
-# import socket
-# socks.set_default_proxy(socks.SOCKS5, "127.0.0.1", 10808)
-# socket.socket = socks.socksocket
-# -------------------------------
+import logging
+logging.basicConfig(level = logging.DEBUG,format = '[%(asctime)s] %(levelname)s [%(name)s:%(lineno)s] %(message)s')
+logger = logging.getLogger(__name__)
 
 '''
     Global entrance
 '''
-
-async def new_game() -> None:
-    return
-
-async def join_game() -> None:
-    return
-
-async def kill_game() -> None:
-    return
-
-async def help() -> None:
-    return
-
-async def inline_query() -> None:
-    return
-
-
 if __name__ == '__main__':
-    '''
-    bot_app = Application.builder().token(TOKEN).build()
-
-    bot_app.add_handler(CommandHandler("new", new_game))
-    bot_app.add_handler(CommandHandler("join", join_game))
-    bot_app.add_handler(CommandHandler("kill", kill_game))
-    bot_app.add_handler(CommandHandler("help", help))
-
-    bot_app.add_handler(InlineQueryHandler(inline_query))
-
-    bot_app.run_polling()
-    '''
+    logger.warning('TGDDZ preparing to start......')
+    
+    # TODO: argparse
+    
+    # start_bot(config.TOKEN, config.PROXY)
 
     d = Deck()
     print([repr(i) for i in d.pcards])
