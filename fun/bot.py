@@ -242,9 +242,9 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                             func = query.edit_message_text if not bot else last.reply_text
                             last = await func(text = f"{room.user.name} {txt} in this round.")
                             if room.lord is not False:
-                                assert(room.decide_lord(room.lord) is True) # should not fail here
+                                assert(room.decide_lord(room.lord) is True) # no reason to fail here
                                 await sleep(1)
-                                await last.reply_text(f"Lord decided. Give {room.user.name} in pos:{pos+1} three cards.")
+                                await last.reply_text(f"Lord decided. Give {room.user.name} in pos:{pos+1} three cards.\n" + repr(room.lord_cards))
                                 break
                             if room.next_bid() is False:
                                 await sleep(1)

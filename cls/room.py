@@ -198,9 +198,9 @@ class Room:
         '''
         if 0 in self._bids:
             return False
-        if self._bidcount < 3 or (self._bidcount >= 3 and self._bids.count(1) > 1):
+        if self._bidcount < 3 or self._bids.count(1) > 1:
             return False
-        if self._bids.count(2) > 0:
+        if 2 in self._bids:
             return self._bids.index(2)
         if max(self._bids) < 0:
             return False
