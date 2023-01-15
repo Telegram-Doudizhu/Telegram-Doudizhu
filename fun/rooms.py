@@ -51,10 +51,10 @@ Room.destroy = destroy
 def _join(self: Room, pos: int, user: Room.User|Room.Robot) -> bool|str:
     '''
         join a user to the room
-        return True if succeed otherwise error message
+        return True if succeeded, otherwise error message
     '''
     if self.state != Room.STATE_JOINING:
-        return f'Room state mismatch, STATE_JOINING expected, int:{self.state} given'
+        return f'Room state mismatch, STATE_JOINING expected, int:{self.state} found'
     if self._users[pos] is not None:
         return f'Room position {pos} occupied'
     if type(user) is Room.User:
@@ -70,10 +70,10 @@ Room.join2 = lambda self, user: self._join(2, user)
 def _leave(self: Room, pos: int) -> bool|str:
     '''
         leave a user from the room
-        return True if succeed otherwise error message
+        return True if succeeded, otherwise error message
     '''
     if self.state != Room.STATE_JOINING:
-        return f'Room state mismatch, STATE_JOINING expected, int:{self.state} given'
+        return f'Room state mismatch, STATE_JOINING expected, int:{self.state} found'
     user = self._users[pos]
     if user is None:
         return f'Room position {pos} empty'

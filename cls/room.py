@@ -1,11 +1,13 @@
 from uuid import uuid4
+from cls.error import InternalError
+from cls.cards import Cards
 from cls.deck import Deck
 
 class Room:
     '''
         A room in the game.
     '''
-    __slots__ = ('_id', '_chatid', '_state', '_users', '_deck', )
+    __slots__ = ('_id', '_chatid', '_state', '_users', '_deck', '_bids', '_bidcount', '_lordcard', )
     
     (
         STATE_CREATE,  # should not appear
@@ -57,6 +59,8 @@ class Room:
         self._state = Room.STATE_CREATE
         self._users = [owner, None, None]
         self._deck = Deck()
+        self._bids = [0, 0, 0]
+        self._bidcount = 0
     
     @property
     def id(self) -> str:
@@ -117,13 +121,181 @@ class Room:
     def start(self) -> bool|str:
         '''
             start the room
-            return True if succeed otherwise error message
+            return True if succeeded, otherwise error message
         '''
         if self.state != Room.STATE_JOINING:
-            return f'Room state mismatch, STATE_JOINING expected, int:{self.state} given'
+            return f'Room state mismatch, STATE_JOINING expected, int:{self.state} found'
         if self.user1 is None or self.user2 is None:
             return 'Not enough players'
         self.state = Room.STATE_DECIDING
         return True
     
+    def reset(self) -> None:
+        '''
+            reset the room
+        '''
+        # state verification may be added here; TODO
+        self._deck = Deck()
+        self._bids = [0, 0, 0]
+        self._bidcount = 0
+        self.state = Room.STATE_JOINING
+
+    @property
+    def cur(self) -> int:
+        '''
+            get current player
+        '''
+        return self._deck.get_cur()
+    
+    @cur.setter
+    def cur(self, idx: int) -> None:
+        '''
+            set current player
+        '''
+        if not 0 <= idx < 3:
+            raise InternalError('Invalid player index int:{idx} given')
+        while self._deck.get_cur() != idx:
+            self.next()
+    
+    def next(self) -> None:
+        '''
+            move to next player
+        '''
+        self._deck.move_next()
+    
+    @property
+    def user(self) -> User|Robot:
+        '''
+            get current user
+        '''
+        return self._users[self.cur]
+
+    @property
+    def bid(self) -> int:
+        '''
+            get bid of current player
+        '''
+        return self._bids[self.cur]
+    
+    def decide_lord(self, idx: int) -> bool|str:
+        '''
+            decide lord
+            return True if succeeded, otherwise error message
+        '''
+        if not 0 <= idx < 3:
+            raise InternalError('Invalid player index int:{idx} given')
+        if self.state != Room.STATE_DECIDING:
+            return f'Room state mismatch, STATE_DECIDING expected, int:{self.state} found'
+        self._lordcard = self._deck.decide_lord(idx)
+        self.state = Room.STATE_PLAYING
+        return True
+
+    @property
+    def lord(self) -> bool|int:
+        '''
+            get lord index
+            return False if not decided
+        '''
+        if 0 in self._bids:
+            return False
+        if self._bidcount < 3 or (self._bidcount >= 3 and self._bids.count(1) > 1):
+            return False
+        if self._bids.count(2) > 0:
+            return self._bids.index(2)
+        if max(self._bids) < 0:
+            return False
+        return self._bids.index(max(self._bids))
+
+    @property
+    def lord_cards(self) -> Cards:
+        '''
+            get three additional lord cards
+        '''
+        return self._lordcard
+
+    def next_bid(self) -> bool:
+        '''
+            move to next available player for bidding
+            return True if succeeded, False if all passed (needs a reset)
+        '''
+        if all(b < 0 for b in self._bids):
+            return False
+        self.next()
+        while self.bid < 0:
+            self.next()
+        return True
+
+    def bids(self, bid: bool) -> bool|str:
+        '''
+            bid for lord (current player)
+            return True if succeeded, otherwise error message
+        '''
+        if self.state != Room.STATE_DECIDING:
+            return f'Room state mismatch, STATE_DECIDING expected, int:{self.state} found'
+        if self.bid < 0:
+            raise InternalError(f'Invalid bid state, unexpected int:{self.bid}')
+        if bid:
+            self._bids[self.cur] += 1
+        else:
+            self._bids[self.cur] = self._bidcount - 10
+        self._bidcount += 1
+        return True
+    
+    @property
+    def must(self) -> bool:
+        '''
+            check whether current player must play
+        '''
+        return self._deck.must_play()
+
+    def play(self, cards: Cards) -> bool|str:
+        '''
+            play cards (current player)
+            self.cur moves to the next after calling this
+            return True if succeeded, otherwise error message
+        '''
+        if self.state != Room.STATE_PLAYING:
+            return f'Room state mismatch, STATE_PLAYING expected, int:{self.state} found'
+        if not self._deck.check_playable(cards):
+            return 'Unplayable cards'
+        self._deck.do_play(cards)
+        return True
+    
+    @property
+    def cards(self) -> Cards:
+        '''
+            get cards of current player
+        '''
+        return self._deck.get_cards(self.cur)
+
+    @property
+    def lastcards(self) -> Cards:
+        '''
+            get last player's cards
+        '''
+        return self._deck.get_cards(self._deck.get_lastcur())
+
+    @property
+    def lastwin(self) -> bool|int:
+        '''
+            check whether game is over
+            must be called directly after self.play()
+            return False if not, otherwise winner index
+        '''
+        lastcur = self._deck.get_lastcur()
+        if self._deck.get_cards(lastcur).length == 0:
+            return lastcur
+        return False
+    
+    @property
+    def win(self) -> bool|int:
+        '''
+            check whether game is over
+            return False if not, otherwise winner index
+        '''
+        for i in range(3):
+            if self._deck.get_cards(i).length == 0:
+                return i
+        return False
+
     

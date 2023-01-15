@@ -1,11 +1,14 @@
 from uuid import uuid4
+from asyncio import sleep
+from cls.error import InternalError
 from cls.room import Room
 from fun.rooms import *
+from fun.robot import *
 
 import logging
 logger = logging.getLogger(__name__)
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InlineQueryResultArticle, InputTextMessageContent, Update
+from telegram import Message, InlineKeyboardButton, InlineKeyboardMarkup, InlineQueryResultArticle, InputTextMessageContent, Update
 from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, InlineQueryHandler, ContextTypes
 
@@ -32,8 +35,11 @@ class Button:
         Settings,
         Start,
     ) = map(chr, range(0x41, 0x46))
-    nHHard = 0x60
-    HBack = chr(0x70)
+    nHHard = 0x50; HBack = chr(0x60)
+    (
+        DBid,
+        DPass,
+    ) = map(chr, range(0x61, 0x63))
     
 def CON_CBD(roomid: str, msg: str, msg1:str = ''):
     '''
@@ -70,6 +76,18 @@ async def GEN_KBD_HARD(room: Room, parent: str) -> InlineKeyboardMarkup:
     keyboard.append([ InlineKeyboardButton("Back", callback_data = CON_CBD(room.id, parent, Button.HBack)), ])
     return InlineKeyboardMarkup(keyboard)
 
+async def GEN_KBD_DLORD(room: Room) -> InlineKeyboardMarkup:
+    '''
+        Generate keyboard for lord decision
+    '''
+    keyboard = [
+        [
+            InlineKeyboardButton("Bid", callback_data = CON_CBD(room.id, Button.DBid)),
+            InlineKeyboardButton("Pass", callback_data = CON_CBD(room.id, Button.DPass)),
+        ],
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
 
 async def new_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     '''
@@ -99,7 +117,8 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     query = update.callback_query
     
     async def error(msg: str):
-        await query.edit_message_text(text = "Internal error has occurred.\n" + str)
+        logging.critical(InternalError(msg), exc_info = True)
+        await query.edit_message_text(text = "Internal error has occurred.\n" + msg)
 
     roomid, msg, msg1 = DES_CBD(query.data)
     room = Room.from_roomid(roomid)
@@ -107,90 +126,151 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await query.edit_message_text(text = "This room has been destroyed.")
         await query.answer()
         return
-    if room.state != Room.STATE_JOINING:
-        error(f"Room state mismatch, STATUS_JOINING expected, int:{room.state} given")
-        await query.answer()
-        return
     
+    async def start_bid(room: Room, last: Message):
+        await sleep(1) # telegram api limitations
+        room.reset(); room.start() # a simple restart
+        while type(room.user) is Room.Robot: # at least one real player
+            await sleep(1)
+            bid = will_robot_bid(room)
+            txt = "bidded" if bid else "passed"
+            assert(room.bids(bid) is True) # no reason to fail here
+            logger.info(f"User {txt} lord, {room.user.name} in room {room.id}.")
+            last = await last.reply_text(text = f"{room.user.name} {txt} in this round.") 
+            assert(room.next_bid() is True) # no reason to fail here
+        markup = await GEN_KBD_DLORD(room)
+        await last.reply_text(f"{room.user.name}, make your choice:", reply_markup = markup)
+
     text = None
-    match msg:
-        case Button.User1:
-            if query.from_user.id == room.owner.id:
-                logger.info(f"Room destroyed: {room.id}, owner: {room.owner.name} left")
-                room.destroy(); del room
-                await query.edit_message_text(text = "The owner has left the room.")
+    match room.state:
         
-        case Button.User2 | Button.User3:
-            pos = 2 if msg == Button.User2 else 3
-            occupied = bool(room.users[pos - 1] is not None)
-            join = room.join1 if msg == Button.User2 else room.join2
-            leave = room.leave1 if msg == Button.User2 else room.leave2
-            refresh = False
-            if not occupied and query.from_user.id == room.owner.id:
-                match msg1:
-                    case '':
-                        reply_markup = await GEN_KBD_HARD(room, msg)
-                        await query.edit_message_text(text = "Select a hard mode for the robot.", reply_markup = reply_markup)
-                    case Button.HBack:
+        case Room.STATE_JOINING:
+            match msg:
+                case Button.User1:
+                    if query.from_user.id == room.owner.id:
+                        logger.info(f"Room destroyed: {room.id}, owner: {room.owner.name} left")
+                        room.destroy(); del room
+                        await query.edit_message_text(text = "The owner has left the room.")
+        
+                case Button.User2 | Button.User3:
+                    pos = 2 if msg == Button.User2 else 3
+                    occupied = bool(room.users[pos - 1] is not None)
+                    join = room.join1 if msg == Button.User2 else room.join2
+                    leave = room.leave1 if msg == Button.User2 else room.leave2
+                    refresh = False
+                    if not occupied and query.from_user.id == room.owner.id:
+                        match msg1:
+                            case '':
+                                reply_markup = await GEN_KBD_HARD(room, msg)
+                                await query.edit_message_text(text = "Select a hard mode for the robot.", reply_markup = reply_markup)
+                            case Button.HBack:
+                                refresh = True
+                            case msg1 if msg1 in map(chr, range(Button.nHHard, Button.nHHard + len(Room.Robot.hard_list))):
+                                robot = Room.Robot(ord(msg1) - Button.nHHard)
+                                leave() # force leave
+                                if (ret:=join(robot)) is True:
+                                    refresh = True
+                                    logger.info(f"Robot {robot.name} joined in room {room.id}, pos:{pos}")
+                                    text = f"Robot {robot.name} joined in pos:{pos}."
+                                else:
+                                    text = ret  
+                            case _:
+                                await error(f"Invalid button ({msg}) pressed.")
+                    elif msg1 != '':
+                        pass
+                    elif occupied and query.from_user.id == room.owner.id:
                         refresh = True
-                    case msg1 if msg1 in map(chr, range(Button.nHHard, Button.nHHard + len(Room.Robot.hard_list))):
-                        robot = Room.Robot(ord(msg1) - Button.nHHard)
-                        leave() # force leave
-                        if (ret:=join(robot)) is True:
-                            refresh = True
-                            logger.info(f"Robot {robot.name} joined in room {room.id}, pos:{pos}")
-                            text = f"Robot {robot.name} joined in pos:{pos}."
+                        name = room.users[pos - 1].name
+                        if (ret:=leave()) is True:
+                            logger.info(f"Kick user {name} from room {room.id}, pos:{pos}")
+                            text = f"Kicked user {name} from room."
                         else:
-                            text = ret  
-                    case _:
-                        error("Invalid button ({msg}) pressed.")
-            elif msg1 != '':
-                pass
-            elif occupied and query.from_user.id == room.owner.id:
-                refresh = True
-                name = room.users[pos - 1].name
-                if (ret:=leave()) is True:
-                    logger.info(f"Kick user {name} from room {room.id}, pos:{pos}")
-                    text = f"Kicked user {name} from room."
-                else:
-                    text = ret
-            elif occupied and (query.from_user.id == room.users[pos - 1].id):
-                refresh = True
-                name = room.users[pos - 1].name
-                if (ret:=leave()) is True:
-                    logger.info(f"User left {name}, room {room.id}, pos:{pos}")
-                    text = f"You have left the room."
-                else:
-                    text = ret
-            elif not occupied:
-                refresh = True
-                if (ret:=join(Room.User(query.from_user.id, f"User @{query.from_user.username}"))) is True:
-                    logger.info(f"User joined {room.users[pos - 1].name}, room {room.id}, pos:{pos}")
-                    text = f"You have joined the room in pos:{pos}."
-                else:
-                    text = ret
-            else:
-                text = "This place is occupied."
-            if refresh:
-                reply_markup = await GEN_KBD(room)
-                await query.edit_message_text(text = "A new room has been created for you.", reply_markup = reply_markup)
+                            text = ret
+                    elif occupied and (query.from_user.id == room.users[pos - 1].id):
+                        refresh = True
+                        name = room.users[pos - 1].name
+                        if (ret:=leave()) is True:
+                            logger.info(f"User left {name}, room {room.id}, pos:{pos}")
+                            text = "You have left the room."
+                        else:
+                            text = ret
+                    elif not occupied:
+                        refresh = True
+                        if (ret:=join(Room.User(query.from_user.id, f"User @{query.from_user.username}"))) is True:
+                            logger.info(f"User joined {room.users[pos - 1].name}, room {room.id}, pos:{pos}")
+                            text = f"You have joined the room in pos:{pos}."
+                        else:
+                            text = ret
+                    else:
+                        text = "This place is occupied."
+                    if refresh:
+                        reply_markup = await GEN_KBD(room)
+                        await query.edit_message_text(text = "A new room has been created for you.", reply_markup = reply_markup)
         
-        case Button.Settings:
-            if query.from_user.id == room.owner.id:
-                text = "NOT IMPLEMENTED" # TODO
-            else:
-                text = "You are not the owner."
+                case Button.Settings:
+                    if query.from_user.id == room.owner.id:
+                        text = "NOT IMPLEMENTED" # TODO
+                    else:
+                        text = "You are not the owner."
         
-        case Button.Start:
-            if query.from_user.id == room.owner.id:
-                if (ret:=room.start()) is True:
-                    logger.info(f"Room started: {room.id}.")
-                    await query.edit_message_text(text = "This room has started.")
-                else:
-                    text = ret
+                case Button.Start:
+                    if query.from_user.id == room.owner.id:
+                        if (ret:=room.start()) is True:
+                            logger.info(f"Room started: {room.id}.")
+                            await query.edit_message_text(text = "This room has started.")
+                            await start_bid(room, query.message)
+                        else:
+                            text = ret
+                    else:
+                        text = "You are not the owner."
+                case _:
+                    await error(f"Invalid button ({msg}) pressed.")
+        
+        case Room.STATE_DECIDING:
+            match msg:
+                case Button.DBid | Button.DPass:
+                    bid = bool(msg == Button.DBid)
+                    txt = "bidded" if bid else "passed"
+                    pos = -1
+                    for i, user in enumerate(room.users):
+                        if type(user) is Room.User and user.id == query.from_user.id:
+                            pos = i
+                    last = query.message; bot = False
+                    while pos == room.cur: # continue for robots
+                        if (ret:=room.bids(bid)) is True:
+                            logger.info(f"User {txt} lord, {room.user.name} in room {room.id}.")
+                            func = query.edit_message_text if not bot else last.reply_text
+                            last = await func(text = f"{room.user.name} {txt} in this round.")
+                            if room.lord is not False:
+                                assert(room.decide_lord(room.lord) is True) # should not fail here
+                                await sleep(1)
+                                await last.reply_text(f"Lord decided. Give {room.user.name} in pos:{pos+1} three cards.")
+                                break
+                            if room.next_bid() is False:
+                                await sleep(1)
+                                last = await last.reply_text("Nobody bids. Starting a new round.")
+                                await start_bid(room, last)
+                            else:
+                                if type(room.user) is Room.Robot:
+                                    bid = will_robot_bid(room)
+                                    txt = "bidded" if bid else "passed"
+                                    pos = room.cur
+                                    bot = True
+                                    await sleep(1)
+                                    continue
+                                markup = await GEN_KBD_DLORD(room)
+                                last = await last.reply_text(f"{room.user.name}, make your choice:", reply_markup = markup)
+                        else:
+                            text = ret
+                        break
+                    else:
+                        text = "It's not your turn yet."
+                case _:
+                    await error(f"Invalid button ({msg}) pressed.")
+            
         case _:
-            error("Invalid button ({msg}) pressed.")
-    
+            await error(f"Invalid room state int:{room.state} for this action.")
+
     await query.answer(text)
 
 async def inline_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

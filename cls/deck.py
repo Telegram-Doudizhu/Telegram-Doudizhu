@@ -50,6 +50,12 @@ class Deck:
         '''
         return self._pcards[self.get_lastcur()].length
 
+    def move_next(self) -> None:
+        '''
+            move to next player
+        '''
+        self._cur = (self._cur + 1) % 3
+
     def get_cards(self, cur:int|None = None) -> Cards:
         '''
             get player cards
@@ -59,22 +65,30 @@ class Deck:
             cur = self._cur
         return self._pcards[cur]
 
-    def decide_lord(self, idx:int) -> None:
+    def decide_lord(self, idx:int) -> Cards:
         '''
             allocate top cards to player lord
         '''
         if self.lord_decided() or not (0 <= idx < 3):
             raise InternalError('Invalid call or parameter given')
         self._cur = idx
-        self._pcards[idx].do_add(self._tcards)
+        t = self._tcards
+        self._pcards[idx].do_add(t)
         self._tcards = None
+        return t
 
+    def must_play(self) -> bool:
+        '''
+            check whether current player must play
+        '''
+        return bool(self._must == 2)
+        
     def check_playable(self, cards:Cards) -> bool:
         '''
             check whether cards are legal and playable
         '''
         if len(cards) == 0:
-            return bool(self._must < 2) # skip
+            return not self.must_play() # skip
         return (cards in self._pcards[self._cur]) and self._last < cards
 
     def lord_decided(self) -> bool:
@@ -98,4 +112,4 @@ class Deck:
             self._must = 0
             self._pcards[self._cur].do_remove(cards)
             self._last = cards
-        self._cur = (self._cur + 1) % 3
+        self.move_next()
