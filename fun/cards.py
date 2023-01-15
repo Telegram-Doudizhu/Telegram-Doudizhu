@@ -56,7 +56,7 @@ def from_cardlist(cls:Cards, cardlist:list[str]|str, cards:Cards|None = None) ->
     # by length descending, exact match first
     cardlist.sort(key = len, reverse = True)
     if cards is not None:
-        cards = cards.get_cards().copy()
+        cards = cards.cards.copy()
     ret = []
     for cardstr in cardlist:
         try:

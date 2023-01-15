@@ -7,7 +7,7 @@ class Deck:
     '''
         Card deck
     '''
-    __slots__ = ('tcards', 'pcards', 'cur', 'last', 'must', )
+    __slots__ = ('_tcards', '_pcards', '_cur', '_last', '_must', )
 
     # initial card deck
     deck_cardstr = '34567890JQKA2'
@@ -20,35 +20,35 @@ class Deck:
         '''
         cards = Deck.deck_cards.copy()
         random.seed(); random.shuffle(cards); random.shuffle(cards)
-        self.tcards = Cards(cards[:3]); cards = cards[3:]
-        self.pcards = [Cards(cards[:17]), Cards(cards[17:34]), Cards(cards[34:])]
-        self.cur = 0; self.last = Cards([]); self.must = 2
+        self._tcards = Cards(cards[:3]); cards = cards[3:]
+        self._pcards = [Cards(cards[:17]), Cards(cards[17:34]), Cards(cards[34:])]
+        self._cur = 0; self._last = Cards([]); self._must = 2
 
     def get_cur(self) -> int:
         '''
             get current player index
         '''
-        return self.cur
+        return self._cur
 
     def get_lastcur(self) -> int:
         '''
             get last player index
         '''
-        return (self.cur + 2) % 3
+        return (self._cur + 2) % 3
 
     def get_left(self, cur:int|None = None) -> int:
         '''
             get player left cards
         '''
         if cur is None:
-            cur = self.cur
-        return self.pcards[cur].get_left()
+            cur = self._cur
+        return self._pcards[cur].length
 
     def get_lastleft(self) -> int:
         '''
             get last player left cards
         '''
-        return self.pcards[self.get_lastcur()].get_left()
+        return self._pcards[self.get_lastcur()].length
 
     def get_cards(self, cur:int|None = None) -> Cards:
         '''
@@ -56,8 +56,8 @@ class Deck:
             cur: int index; None (default) for current
         '''
         if cur is None:
-            cur = self.cur
-        return self.pcards[cur]
+            cur = self._cur
+        return self._pcards[cur]
 
     def decide_lord(self, idx:int) -> None:
         '''
@@ -65,23 +65,23 @@ class Deck:
         '''
         if self.lord_decided() or not (0 <= idx < 3):
             raise InternalError('Invalid call or parameter given')
-        self.cur = idx
-        self.pcards[idx].do_add(self.tcards)
-        self.tcards = None
+        self._cur = idx
+        self._pcards[idx].do_add(self._tcards)
+        self._tcards = None
 
     def check_playable(self, cards:Cards) -> bool:
         '''
             check whether cards are legal and playable
         '''
         if len(cards) == 0:
-            return bool(self.must < 2) # skip
-        return (cards in self.pcards[self.cur]) and self.last < cards
+            return bool(self._must < 2) # skip
+        return (cards in self._pcards[self._cur]) and self._last < cards
 
     def lord_decided(self) -> bool:
         '''
             whether lord is decided
         '''
-        return self.tcards is None
+        return self._tcards is None
 
     def do_play(self, cards:Cards) -> None:
         '''
@@ -91,11 +91,11 @@ class Deck:
         if not self.lord_decided():
             raise InternalError('Lord is not decided')
         if len(cards) == 0: # skip
-            self.must += 1
-            if self.must == 2:
-                self.last = Cards([]) # reset last
+            self._must += 1
+            if self._must == 2:
+                self._last = Cards([]) # reset last
         else:
-            self.must = 0
-            self.pcards[self.cur].do_remove(cards)
-            self.last = cards
-        self.cur = (self.cur + 1) % 3
+            self._must = 0
+            self._pcards[self._cur].do_remove(cards)
+            self._last = cards
+        self._cur = (self._cur + 1) % 3

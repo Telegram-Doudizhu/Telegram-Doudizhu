@@ -1,3 +1,4 @@
+from typing import Self
 from cls.error import InternalError
 from cls.card import Card
 
@@ -5,18 +6,16 @@ class Cards:
     '''
         Cards consisting of Card
     '''
-    __slots__ = ('cards', )
+    __slots__ = ('_cards', )
 
-class Cards:
-
-    def __init__(self, cards:Cards|list[Card]):
+    def __init__(self, cards: Self|list[Card]):
         '''
             initialize cards
         '''
         if all(type(card) is Card for card in cards):
-            self.cards = sorted(cards)
+            self._cards = sorted(cards)
         elif type(cards) is Cards:
-            self.cards = sorted(cards.cards)
+            self._cards = sorted(cards.cards)
         else:
             raise InternalError('Invalid parameter type')
 
@@ -27,7 +26,7 @@ class Cards:
         '''
             check if card idx all equals (at least 2)
         '''
-        cards = self.cards
+        cards = self._cards
         if len(cards) < 2:
             raise InternalError('Cards not enough')
         for i in range(1, min(cnt, len(cards))):
@@ -39,7 +38,7 @@ class Cards:
         '''
             check if card idx is continuous (at least 2)
         '''
-        cards = self.cards
+        cards = self._cards
         if len(cards) < 2:
             raise InternalError('Cards not enough')
         for i in range(1, min(cnt, len(cards))):
@@ -58,11 +57,11 @@ class Cards:
             type:
         
         '''
-        cards,lc = self.cards,len(self.cards)
+        cards,lc = self._cards,len(self._cards)
         if lc == 0: return [0, 0, 0] # empty or invalid
         if lc == 4 and self._check_equals():
             return [2, 1, cards[0]] # Bomb
-        if lc == 2 and cards[0].is_king() and cards[1].is_king():
+        if lc == 2 and cards[0].is_king and cards[1].is_king:
             return [3, 2, cards[0]] # KingBomb
         cnt,spt = 1,[[] for _ in range(5)]
         for i in range(1, lc):
@@ -120,7 +119,7 @@ class Cards:
                 return [1, 27+lc//2-3, spt[2][0]] # ~~
         return [0, 0, 0] # empty or invalid
 
-    def __lt__(self, other:Cards):
+    def __lt__(self, other: Self):
         '''
             compare cards
         '''
@@ -132,7 +131,7 @@ class Cards:
                 return False
         return t1[1] == t2[1] and int(t1[2]) < int(t2[2])
 
-    def do_remove(self, cards:Cards|list[Card]) -> None:
+    def do_remove(self, cards: Self|list[Card]) -> None:
         '''
             remove cards
         '''
@@ -144,11 +143,11 @@ class Cards:
             raise InternalError('Invalid parameter type')
         for card in cards:
             try:
-                self.cards.remove(card)
+                self._cards.remove(card)
             except ValueError:
                 raise InternalError('Card not found')
 
-    def do_add(self, cards:Cards|list[Card]) -> None:
+    def do_add(self, cards: Self|list[Card]) -> None:
         '''
             add new cards
         '''
@@ -158,75 +157,79 @@ class Cards:
             cards = cards.cards
         else:
             raise InternalError('Invalid parameter type')
-        self.cards.extend(cards)
-        self.cards.sort()
-
-    def get_cards(self) -> list[Card]:
+        self._cards.extend(cards)
+        self._cards.sort()
+    
+    @property
+    def cards(self) -> list[Card]:
         '''
             get cards
         '''
-        return self.cards
+        return self._cards
 
-    def __contains__(self, cards:Cards|list[Card]|Card) -> bool:
+    def __contains__(self, cards: Self|list[Card]|Card) -> bool:
         '''
             whether contains (in self)
         '''
         if type(cards) is Card:
-            return cards in self.cards
+            return cards in self._cards
         elif type(cards) is Cards:
             cards = cards.cards
         if type(cards) is list:
             for card in cards:
-                if card not in self.cards:
+                if card not in self._cards:
                     return False
         else:
             raise InternalError('Invalid parameter type')
         return True
 
-    def get_left(self) -> int:
+    @property
+    def length(self) -> int:
         '''
-            get left cards count
+            get cards count
         '''
-        return len(self.cards)
+        return len(self._cards)
 
     def __str__(self):
         '''
             get cards string
             format: '390JB'
         '''
-        return ''.join(self.get_cards_str())
+        return ''.join(self.cards_str)
 
-    def get_cards_str(self) -> list[str]:
+    @property
+    def cards_str(self) -> list[str]:
         '''
             get cards string list
             format: ['3','9','0','J','B']
         '''
-        return [str(card) for card in self.cards]
+        return [str(card) for card in self._cards]
     
     def __repr__(self):
         '''
             get cards string
             format: '3C 9H 10D JS B'
         '''
-        return ' '.join(self.get_cards_repr())
+        return ' '.join(self.cards_repr)
     
-    def get_cards_repr(self) -> list[str]:
+    @property
+    def cards_repr(self) -> list[str]:
         '''
             get cards string list
             format: ['3C','9H','10D','JS','B']
         '''
-        return [repr(card) for card in self.cards]
+        return [repr(card) for card in self._cards]
 
     def __getitem__(self, idx):
         '''
             rewrite [] by index
         '''
-        if not (0 <= idx < len(self.cards)):
+        if not (0 <= idx < len(self._cards)):
             raise InternalError('Invalid card index')
-        return self.cards[idx]
+        return self._cards[idx]
 
     def __len__(self):
         '''
             rewrite len()
         '''
-        return len(self.cards)
+        return len(self._cards)

@@ -4,7 +4,7 @@ class Card:
     '''
         A single card
     ''' 
-    __slots__ = ('idx', 'suit', )
+    __slots__ = ('_idx', '_suit', )
     
     def __init__(self, idx:int|str, suit:int|str|None = None):
         '''
@@ -27,25 +27,25 @@ class Card:
             case int():
                 if idx not in range(3, 32+1):
                     raise InternalError('Invalid card index given')
-                self.idx = idx
+                self._idx = idx
             case str():
                 if len(idx) < 1:
                     raise InternalError('Invalid card string given')
                 match c:=idx[0].upper():
                     case c if c in [str(i) for i in range(3, 9+1)]:
-                        self.idx = int(idx[0])
+                        self._idx = int(idx[0])
                     case '0':
-                        self.idx = 10
+                        self._idx = 10
                     case '1' if len(idx) > 1 and idx[:2] == '10':
-                        self.idx = 10
+                        self._idx = 10
                     case 'J' | 'Q' | 'K':
-                        self.idx = 11 if c == 'J' else 12 if c == 'Q' else 13
+                        self._idx = 11 if c == 'J' else 12 if c == 'Q' else 13
                     case 'A' | '2':
-                        self.idx = 21 if c == 'A' else 22
+                        self._idx = 21 if c == 'A' else 22
                     case 'B':
-                        self.idx = 31
+                        self._idx = 31
                     case 'R':
-                        self.idx = 32
+                        self._idx = 32
                     case _:
                         raise InternalError('Invalid card string given')
             case _:
@@ -54,25 +54,26 @@ class Card:
             case int():
                 if suit not in range(4):
                     raise InternalError('Invalid card suit given')
-                self.suit = ['S', 'H', 'C', 'D'][suit]
+                self._suit = ['S', 'H', 'C', 'D'][suit]
             case str():
-                self.suit = suit.upper()
-            case None if not self.is_king():
+                self._suit = suit.upper()
+            case None if not self.is_king:
                 if type(idx) is not str or len(idx) < 2:
                     raise InternalError('Missing card suit')
-                self.suit = idx[-1].upper()
-            case None if self.is_king():
-                self.suit = None
+                self._suit = idx[-1].upper()
+            case None if self.is_king:
+                self._suit = None
             case _:
                 raise InternalError('Invalid parameter type')
-        if self.suit not in ['S', 'H', 'C', 'D', None] or (self.is_king() and self.suit is not None):
+        if self._suit not in ['S', 'H', 'C', 'D', None] or (self.is_king and self._suit is not None):
             raise InternalError('Invalid card suit given')
     
+    @property
     def is_king(self) -> bool:
         '''
             whether is king card
         '''
-        return self.idx in [31, 32]
+        return self._idx in [31, 32]
 
     def __lt__(self, other):
         '''
@@ -80,9 +81,9 @@ class Card:
         '''
         if type(other) is not Card:
             raise InternalError('Invalid comparsion')
-        if self.idx != other.idx:
-            return self.idx < other.idx
-        return self.suit < other.suit
+        if self._idx != other.idx:
+            return self._idx < other.idx
+        return self._suit < other.suit
 
     def __eq__(self, other):
         '''
@@ -90,40 +91,43 @@ class Card:
         '''
         if type(other) is not Card:
             raise InternalError('Invalid comparsion')
-        return self.idx == other.idx and self.suit == other.suit
-
-    def get_idx(self) -> int:
+        return self._idx == other.idx and self._suit == other.suit
+    
+    @property
+    def idx(self) -> int:
         '''
             get card index
         '''
-        return self.idx
+        return self._idx
     
-    def get_idx_str(self) -> str:
+    @property
+    def idx_str(self) -> str:
         '''
             get card index string
             format: 'A'; '0'; 'B'
         '''
         return self.__str__()
 
-    def get_suit(self) -> str:
+    @property
+    def suit(self) -> str:
         '''
             get card suit
             format: 'S'; 'H'; 'C'; 'D'
         '''
-        return self.suit
+        return self._suit
 
     def __int__(self):
         '''
             get card index
         '''
-        return self.idx
+        return self._idx
 
     def __str__(self):
         '''
             card shown
             format: 'A'; '0'; 'B'
         '''
-        idx = self.idx
+        idx = self._idx
         match idx:
             case idx if 3 <= idx < 10:
                 idx = str(idx)
@@ -146,7 +150,7 @@ class Card:
             card shown (full)
             format: 'AS'; '10C'; 'B'
         '''
-        s = '10' if self.idx == 10 else self.__str__()
-        if self.suit is not None:
-            s += self.suit
+        s = '10' if self._idx == 10 else self.__str__()
+        if self._suit is not None:
+            s += self._suit
         return s
