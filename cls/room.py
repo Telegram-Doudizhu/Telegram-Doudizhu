@@ -170,6 +170,20 @@ class Room:
         '''
         return self._users[self.cur]
 
+    def user_index(self, user: User|int) -> int:
+        '''
+            get user index (by essentially userid)
+            return -1 if not found
+        '''
+        if type(user) is Room.User:
+            user = user.id
+        elif type(user) is not int:
+            raise InternalError(f'Invalid user type {type(user)} given')
+        for i, u in enumerate(self._users):
+            if u is not None and u.id == user:
+                return i
+        return -1
+
     @property
     def bid(self) -> int:
         '''
@@ -248,10 +262,16 @@ class Room:
         '''
         return self._deck.must_play()
 
+    def playable(self, cards: Cards) -> bool:
+        '''
+            check whether cards are playable
+        '''
+        return self._deck.playable(cards)
+
     def play(self, cards: Cards) -> bool|str:
         '''
             play cards (current player)
-            self.cur moves to the next after calling this
+            self.cur moves to the next player after calling this
             return True if succeeded, otherwise error message
         '''
         if self.state != Room.STATE_PLAYING:

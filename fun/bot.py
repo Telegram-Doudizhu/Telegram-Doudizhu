@@ -231,10 +231,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                 case Button.DBid | Button.DPass:
                     bid = bool(msg == Button.DBid)
                     txt = "bidded" if bid else "passed"
-                    pos = -1
-                    for i, user in enumerate(room.users):
-                        if type(user) is Room.User and user.id == query.from_user.id:
-                            pos = i
+                    pos = room.user_index(query.from_user.id)
                     last = query.message; bot = False
                     while pos == room.cur: # continue for robots
                         if (ret:=room.bids(bid)) is True:
