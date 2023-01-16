@@ -4,13 +4,16 @@ from cls.error import InternalError
 from cls.room import Room
 from fun.rooms import *
 from fun.robot import *
+from cls.cards import Cards
+from fun.cards import split_cardstr
 
 import logging
 logger = logging.getLogger(__name__)
 
-from telegram import Message, InlineKeyboardButton, InlineKeyboardMarkup, InlineQueryResultArticle, InputTextMessageContent, Update
+from telegram import Message, InlineKeyboardButton, InlineKeyboardMarkup, InputTextMessageContent, Update
+from telegram import InlineQueryResultArticle, InlineQueryResultCachedSticker, Sticker
 from telegram.constants import ParseMode
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, InlineQueryHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, InlineQueryHandler, ChosenInlineResultHandler, ContextTypes
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     '''
@@ -275,7 +278,127 @@ async def inline_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         Inline query handler
         used for extended card selection
     '''
-    return
+    results = list()
+    query = update.inline_query.query
+    user = update.inline_query.from_user
+    room = Room.from_userid(user.id)
+    if room is None:
+        results.append(
+            InlineQueryResultArticle(
+                id = str(uuid4()),
+                title = "You are not in any room.",
+                input_message_content = InputTextMessageContent(
+                    'You are not in any room. Use /new to create a room or '
+                    'click the join button in other rooms to join the game.'
+                )
+            )
+        )
+        await update.inline_query.answer(results)
+        return
+    match room.state:
+        case Room.STATE_JOINING:
+            results.append(
+                InlineQueryResultArticle(
+                    id = str(uuid4()),
+                    title = "Waiting for the room owner to start game.",
+                    input_message_content = InputTextMessageContent("Waiting for the room owner to start game.")
+                )
+            )
+        case Room.STATE_DECIDING:
+            results.append(
+                InlineQueryResultArticle(
+                    id = str(uuid4()),
+                    title = "Waiting for the lord to be decided.",
+                    input_message_content = InputTextMessageContent("Waiting for the lord to be decided.")
+                )
+            )
+        case Room.STATE_PLAYING:
+            user_cards = room.all_cards(idx = room.user_index(user.id))
+            if type(user_cards) is str:
+                raise InternalError(user_cards)
+            cards_result = ""
+            card_suit = {"S": "♠", "H": "♥", "C": "♣", "D": "♦"}
+            for c in user_cards.cards:
+                card = repr(c)
+                if card == 'R' or card == 'B':
+                    cards_result += card
+                else:
+                    cards_result += card[:-1] + card_suit[card[-1]]
+            if query != "" and room.cur == room.user_index(user.id):
+                query = split_cardstr(query)
+                if type(query) is bool:
+                    results.append(
+                        InlineQueryResultArticle(
+                            id = str(uuid4()),
+                            title = "Play",
+                            input_message_content = InputTextMessageContent("You can't play these cards.")
+                        )
+                    )
+                else:
+                    logger.info(query)
+                    play_cards = Cards.from_cardlist(query, user_cards)
+                    if type(play_cards) is bool:
+                        results.append(
+                            InlineQueryResultArticle(
+                                id = str(uuid4()),
+                                title = "Play ❌",
+                                input_message_content = InputTextMessageContent("You can't play these cards.")
+                            )
+                        )
+                    else:
+                        if room.playable(play_cards):
+                            results.append(
+                                InlineQueryResultArticle(
+                                    id = "PlayCards:" + repr(play_cards),
+                                    title = "Play ✔",
+                                    input_message_content = InputTextMessageContent(
+                                        f"Player {user.name} play {play_cards}.")
+                                )
+                            )
+                        else:
+                            results.append(
+                                InlineQueryResultArticle(
+                                    id = str(uuid4()),
+                                    title = "Play ❌",
+                                    input_message_content = InputTextMessageContent("You can't play these cards.")
+                                )
+                            )
+            if room.cur == room.user_index(user.id):
+                results.append(
+                    InlineQueryResultArticle(
+                        id = "Pass",
+                        title = "PASS",
+                        input_message_content = InputTextMessageContent("You passed.")
+                    )
+                )
+            results.append(
+                InlineQueryResultArticle(
+                    id = str(uuid4()),
+                    title = cards_result,
+                    input_message_content = InputTextMessageContent("Please type the card you want to play in the textbox.")
+                )
+            )
+    await update.inline_query.answer(results, 0)
+
+async def chosen_result_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.chosen_inline_result.from_user
+    room = Room.from_userid(user.id)
+    if room is None:
+        return
+    result = update.chosen_inline_result.result_id.split(":")[0]
+    cards = update.chosen_inline_result.result_id.split(":")[-1]
+    match result:
+        case "None":
+            return
+        case "PlayCards":
+            if Cards.from_cardlist(cards) is False:
+                return
+            room.play(Cards.from_cardlist(cards))
+        case "Pass":
+            room.next()
+        case _:
+            pass
+    
 
 def remove_job_if_exists(name: str, context: ContextTypes.DEFAULT_TYPE) -> bool:
     '''
@@ -321,6 +444,7 @@ def start_bot(token:str, proxy:str = '') -> None:
     app.add_handler(CommandHandler("new", new_command))
     app.add_handler(CallbackQueryHandler(callback_handler))
     app.add_handler(InlineQueryHandler(inline_handler))
+    app.add_handler(ChosenInlineResultHandler(chosen_result_handler))
 
     logger.warning("Telegram bot has started")
     app.run_polling()

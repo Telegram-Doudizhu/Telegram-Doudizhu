@@ -15,21 +15,21 @@ logger = logging.getLogger(__name__)
 '''
 if __name__ == '__main__':
     logger.warning('TGDDZ preparing to start')
-    
+
     # TODO: argparse
-    
+
     start_bot(config.TOKEN, config.PROXY)
 
-    d = Deck()
-    print([repr(i) for i in d._pcards])
-    print(repr(d._tcards))
-    d.decide_lord(2)
-    while True:
-        print(f'player {d.get_cur()} card {repr(d.get_cards())}')
-        c = Cards.from_cardlist(input(f'Play{d.get_cur()} > '), d.get_cards())
-        while c is False or not d.check_playable(c):
-            c = Cards.from_cardlist(input(f'Play{d.get_cur()} > '), d.get_cards())
-        d.do_play(c); print(f'player {d.get_lastcur()} left {d.get_lastleft()}')
-        if not d.get_lastleft():
-            break
-    print('Finished')
+    # d = Deck()
+    # print([repr(i) for i in d._pcards])
+    # print(repr(d._tcards))
+    # d.decide_lord(2)
+    # while True:
+    #     print(f'player {d.get_cur()} card {repr(d.get_cards())}')
+    #     c = Cards.from_cardlist(input(f'Play{d.get_cur()} > '), d.get_cards())
+    #     while c is False or not d.check_playable(c):
+    #         c = Cards.from_cardlist(input(f'Play{d.get_cur()} > '), d.get_cards())
+    #     d.do_play(c); print(f'player {d.get_lastcur()} left {d.get_lastleft()}')
+    #     if not d.get_lastleft():
+    #         break
+    # print('Finished')

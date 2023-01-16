@@ -266,7 +266,7 @@ class Room:
         '''
             check whether cards are playable
         '''
-        return self._deck.playable(cards)
+        return self._deck.check_playable(cards)
 
     def play(self, cards: Cards) -> bool|str:
         '''
@@ -294,6 +294,16 @@ class Room:
             get last player's cards
         '''
         return self._deck.get_cards(self._deck.get_lastcur())
+
+    def all_cards(self, idx:int) -> Cards|str:  
+        '''
+            get all cards in the player's hand
+        '''
+        if not 0 <= idx < 3:
+            raise InternalError('Invalid player index int:{idx} given')
+        if self.state != Room.STATE_DECIDING and self.state != Room.STATE_PLAYING:
+            return f'Room state mismatch, STATE_DECIDING | STATE_PLAYING expected, int:{self.state} found'
+        return self._deck.get_cards(idx)
 
     @property
     def lastwin(self) -> bool|int:
