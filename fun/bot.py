@@ -43,6 +43,12 @@ class Button:
         DBid,
         DPass,
     ) = map(chr, range(0x61, 0x63))
+
+class Operation:
+    (
+        Play,
+        Pass
+    ) = map(chr, range(0x71, 0x73))
     
 def CON_CBD(roomid: str, msg: str, msg1:str = ''):
     '''
@@ -91,6 +97,14 @@ async def GEN_KBD_DLORD(room: Room) -> InlineKeyboardMarkup:
     ]
     return InlineKeyboardMarkup(keyboard)
 
+async def GEN_KBD_NEXT() -> InlineKeyboardMarkup:
+    '''
+        Generate keyboard for next player to make choice
+    '''
+    keyboard = [
+        [InlineKeyboardButton("Click to play", switch_inline_query_current_chat = '')],
+    ]
+    return InlineKeyboardMarkup(keyboard)
 
 async def new_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     '''
@@ -282,36 +296,23 @@ async def inline_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     query = update.inline_query.query
     user = update.inline_query.from_user
     room = Room.from_userid(user.id)
+
+    def result_append(result: list, id: str, title: str, chosen_text: str = None, reply_markup = None):
+        chosen_text = title if chosen_text is None else chosen_text
+        results.append(InlineQueryResultArticle(id, title, InputTextMessageContent(chosen_text), reply_markup))
+
     if room is None:
-        results.append(
-            InlineQueryResultArticle(
-                id = str(uuid4()),
-                title = "You are not in any room.",
-                input_message_content = InputTextMessageContent(
-                    'You are not in any room. Use /new to create a room or '
-                    'click the join button in other rooms to join the game.'
-                )
-            )
-        )
+        result_append(results, str(uuid4()), "You are not in any room.",
+                    "You are not in any room. Use /new to create a room or "
+                    "click the join button in other rooms to join the game.")
         await update.inline_query.answer(results)
         return
+
     match room.state:
         case Room.STATE_JOINING:
-            results.append(
-                InlineQueryResultArticle(
-                    id = str(uuid4()),
-                    title = "Waiting for the room owner to start game.",
-                    input_message_content = InputTextMessageContent("Waiting for the room owner to start game.")
-                )
-            )
+            result_append(results, str(uuid4()), "Waiting for the room owner to start game.")
         case Room.STATE_DECIDING:
-            results.append(
-                InlineQueryResultArticle(
-                    id = str(uuid4()),
-                    title = "Waiting for the lord to be decided.",
-                    input_message_content = InputTextMessageContent("Waiting for the lord to be decided.")
-                )
-            )
+            result_append(results, str(uuid4()), "Waiting for the lord to be decided.")
         case Room.STATE_PLAYING:
             user_cards = room.all_cards(idx = room.user_index(user.id))
             if type(user_cards) is str:
@@ -326,75 +327,40 @@ async def inline_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                     cards_result += card[:-1] + card_suit[card[-1]]
             if query != "" and room.cur == room.user_index(user.id):
                 query = split_cardstr(query)
-                if type(query) is bool:
-                    results.append(
-                        InlineQueryResultArticle(
-                            id = str(uuid4()),
-                            title = "Play",
-                            input_message_content = InputTextMessageContent("You can't play these cards.")
-                        )
-                    )
-                else:
-                    logger.info(query)
+                if type(query) is not bool:
                     play_cards = Cards.from_cardlist(query, user_cards)
-                    if type(play_cards) is bool:
-                        results.append(
-                            InlineQueryResultArticle(
-                                id = str(uuid4()),
-                                title = "Play ❌",
-                                input_message_content = InputTextMessageContent("You can't play these cards.")
-                            )
-                        )
-                    else:
+                    if type(play_cards) is not bool:
                         if room.playable(play_cards):
-                            results.append(
-                                InlineQueryResultArticle(
-                                    id = "PlayCards:" + repr(play_cards),
-                                    title = "Play ✔",
-                                    input_message_content = InputTextMessageContent(
-                                        f"Player {user.name} play {play_cards}.")
-                                )
+                            result_append(
+                                results,
+                                CON_CBD(room.id, Operation.Play, repr(play_cards)),
+                                "Play",
+                                f"Player {user.name} played {play_cards}.",
+                                await GEN_KBD_NEXT()
                             )
-                        else:
-                            results.append(
-                                InlineQueryResultArticle(
-                                    id = str(uuid4()),
-                                    title = "Play ❌",
-                                    input_message_content = InputTextMessageContent("You can't play these cards.")
-                                )
-                            )
-            if room.cur == room.user_index(user.id):
-                results.append(
-                    InlineQueryResultArticle(
-                        id = "Pass",
-                        title = "PASS",
-                        input_message_content = InputTextMessageContent("You passed.")
-                    )
-                )
-            results.append(
-                InlineQueryResultArticle(
-                    id = str(uuid4()),
-                    title = cards_result,
-                    input_message_content = InputTextMessageContent("Please type the card you want to play in the textbox.")
-                )
-            )
+            if room.cur == room.user_index(user.id) and room.must is False:
+                result_append(results, CON_CBD(room.id, Operation.Pass), "PASS")
+            result_append(results, str(uuid4()), cards_result, "Please type the card you want to play in the textbox.")
     await update.inline_query.answer(results, 0)
 
 async def chosen_result_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.chosen_inline_result.from_user
-    room = Room.from_userid(user.id)
+    '''
+        Chosen inline result handler
+        used for players' operation
+    '''
+    result = update.chosen_inline_result.result_id
+    if len(DES_CBD(result)) < 2:
+        return
+    roomid, msg, msg1 = DES_CBD(result)
+    room = Room.from_roomid(roomid)
     if room is None:
         return
-    result = update.chosen_inline_result.result_id.split(":")[0]
-    cards = update.chosen_inline_result.result_id.split(":")[-1]
-    match result:
-        case "None":
-            return
-        case "PlayCards":
-            if Cards.from_cardlist(cards) is False:
+    match msg:
+        case Operation.Play:
+            if Cards.from_cardlist(msg1) is False:
                 return
-            room.play(Cards.from_cardlist(cards))
-        case "Pass":
+            room.play(Cards.from_cardlist(msg1))
+        case Operation.Pass:
             room.next()
         case _:
             pass
