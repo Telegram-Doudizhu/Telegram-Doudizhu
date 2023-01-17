@@ -1,5 +1,7 @@
+from pickle import NONE
 from uuid import uuid4
 from asyncio import sleep
+from functools import wraps
 from cls.error import InternalError
 from cls.room import Room
 from fun.rooms import *
@@ -8,12 +10,23 @@ from cls.cards import Cards
 from fun.cards import split_cardstr
 
 import logging
+
+from fun.rooms import roomdata
 logger = logging.getLogger(__name__)
 
-from telegram import Message, InlineKeyboardButton, InlineKeyboardMarkup, InputTextMessageContent, Update
+from telegram import Bot, Message, Update, InlineKeyboardButton, InlineKeyboardMarkup, InputTextMessageContent
 from telegram import InlineQueryResultArticle, InlineQueryResultCachedSticker, Sticker
 from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, InlineQueryHandler, ChosenInlineResultHandler, ContextTypes
+
+def awaitify(sync_func):
+    '''
+        Wrap a synchronous callable to allow `await`ing it
+    '''
+    @wraps(sync_func)
+    async def async_func(*args, **kwargs):
+        return sync_func(*args, **kwargs)
+    return async_func
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     '''
@@ -50,11 +63,15 @@ class Operation:
         Pass
     ) = map(chr, range(0x71, 0x73))
     
-def CON_CBD(roomid: str, msg: str, msg1:str = ''):
+def CON_CBD(room: Room, msg: str, msg1:str = '', data:list[str] = [], actionid:str = None):
     '''
-        Construct callback data for a button
+        Construct callback data
+        generate a unique actionid in room.roomdata, which should be used to identify callback
     '''
-    return f"{roomid}|{msg}|{msg1}"
+    if actionid is None:
+        actionid = str(uuid4())[:8]
+    room.roomdata = [actionid] + data
+    return f"{room.id}|{actionid}|{msg}|{msg1}"
 
 def DES_CBD(data: str):
     '''
@@ -66,12 +83,13 @@ async def GEN_KBD(room: Room) -> InlineKeyboardMarkup:
     '''
         Generate keyboard for room management
     '''
+    aid = str(uuid4())[:8]
     keyboard = [
-        [ InlineKeyboardButton(room.owner.name, callback_data = CON_CBD(room.id, Button.User1)), ],
-        [ InlineKeyboardButton("Click to join" if room.user1 is None else room.user1.name, callback_data = CON_CBD(room.id, Button.User2)), ],
-        [ InlineKeyboardButton("Click to join" if room.user2 is None else room.user2.name, callback_data = CON_CBD(room.id, Button.User3)), ],
-        [ InlineKeyboardButton("Settings", callback_data = CON_CBD(room.id, Button.Settings)), ],
-        [ InlineKeyboardButton("Start!", callback_data = CON_CBD(room.id, Button.Start)), ],
+        [ InlineKeyboardButton(room.owner.name, callback_data = CON_CBD(room, Button.User1, actionid = aid)), ],
+        [ InlineKeyboardButton("Click to join" if room.user1 is None else room.user1.name, callback_data = CON_CBD(room, Button.User2, actionid = aid)), ],
+        [ InlineKeyboardButton("Click to join" if room.user2 is None else room.user2.name, callback_data = CON_CBD(room, Button.User3, actionid = aid)), ],
+        [ InlineKeyboardButton("Settings", callback_data = CON_CBD(room, Button.Settings, actionid = aid)), ],
+        [ InlineKeyboardButton("Start!", callback_data = CON_CBD(room, Button.Start, actionid = aid)), ],
     ]
     return InlineKeyboardMarkup(keyboard)
 
@@ -79,25 +97,27 @@ async def GEN_KBD_HARD(room: Room, parent: str) -> InlineKeyboardMarkup:
     '''
         Generate keyboard for hard mode selection
     '''
+    aid = str(uuid4())[:8]
     keyboard = []
     for i, name in enumerate(Room.Robot.hard_list):
-        keyboard.append([ InlineKeyboardButton(name, callback_data = CON_CBD(room.id, parent, chr(Button.nHHard + i))), ])
-    keyboard.append([ InlineKeyboardButton("Back", callback_data = CON_CBD(room.id, parent, Button.HBack)), ])
+        keyboard.append([ InlineKeyboardButton(name, callback_data = CON_CBD(room, parent, chr(Button.nHHard + i), actionid = aid)), ])
+    keyboard.append([ InlineKeyboardButton("Back", callback_data = CON_CBD(room, parent, Button.HBack, actionid = aid)), ])
     return InlineKeyboardMarkup(keyboard)
 
 async def GEN_KBD_DLORD(room: Room) -> InlineKeyboardMarkup:
     '''
         Generate keyboard for lord decision
     '''
+    aid = str(uuid4())[:8]
     keyboard = [
         [
-            InlineKeyboardButton("Bid", callback_data = CON_CBD(room.id, Button.DBid)),
-            InlineKeyboardButton("Pass", callback_data = CON_CBD(room.id, Button.DPass)),
+            InlineKeyboardButton("Bid", callback_data = CON_CBD(room, Button.DBid, actionid = aid)),
+            InlineKeyboardButton("Pass", callback_data = CON_CBD(room, Button.DPass, actionid = aid)),
         ],
     ]
     return InlineKeyboardMarkup(keyboard)
 
-async def GEN_KBD_NEXT() -> InlineKeyboardMarkup:
+async def GEN_KBD_PLAY() -> InlineKeyboardMarkup:
     '''
         Generate keyboard for next player to make choice
     '''
@@ -105,6 +125,57 @@ async def GEN_KBD_NEXT() -> InlineKeyboardMarkup:
         [InlineKeyboardButton("Click to play", switch_inline_query_current_chat = '')],
     ]
     return InlineKeyboardMarkup(keyboard)
+
+
+def cards_string(cards: Cards) -> str:
+    '''
+        Generate a more readable cards string
+    '''
+    suit = {"S": "♠", "H": "♥", "C": "♣", "D": "♦"}
+    cards_str = repr(cards)
+    for k, v in suit.items():
+        cards_str = cards_str.replace(k, v)
+    return cards_str
+
+async def next_play_cards(bot: Bot, room: Room):
+    '''
+        Play cards until a real user
+        including room ending workflow
+    '''
+    while True:
+        await sleep(1)
+        if room.win is not False:
+            break
+        msg = ''
+        if not room.is_first:
+            msg += f"Last player pos:{room.lastcur+1} has {room.lastcards.length} cards left.\n"
+        if type(room.users[room.cur]) is Room.Robot:
+            cards = what_robot_play(room)
+            assert(room.playable(cards))
+            msg += f"{room.user.name} [{'LORD' if room.lord == room.cur else 'FARM'}] pos:{room.cur+1} chose "
+            if len(cards) == 0:
+                msg += 'to skip this round.'
+                logger.info(f"Robot skipped {room.user.name} in room {room.id}")
+            else:
+                msg += f"{cards_string(cards)}"
+                logger.info(f"Robot played ({repr(cards)}) {room.user.name} in room {room.id}")
+            await bot.send_message(room.chatid, msg)
+            assert(room.play(cards) is True)
+        else:
+            msg += f"{room.user.name} [{'LORD' if room.lord == room.cur else 'FARM'}], it's your turn:"
+            await bot.send_message(room.chatid, msg, reply_markup = await GEN_KBD_PLAY())
+            return
+    winner = room.win
+    loser1 = (winner + 1) % 3
+    loser2 = (winner + 2) % 3
+    await bot.send_message(room.chatid, f"Winner determined, {room.users[winner].name} [{'LORD' if room.lord == winner else 'FARM'}] points += 0\n"
+                                f"{room.users[loser1].name} [{'LORD' if room.lord == loser1 else 'FARM'}] points -= 0\n"
+                                f"{room.users[loser2].name} [{'LORD' if room.lord == loser2 else 'FARM'}] points -= 0")
+    await sleep(1)
+    logger.info(f"Room restarted: {room.id}, last winner int:{winner}.")
+    room.reset()
+    await bot.send_message(room.chatid, "A new room has been created for you.", reply_markup = await GEN_KBD(room))
+
 
 async def new_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     '''
@@ -137,14 +208,19 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         logging.critical(InternalError(msg), exc_info = True)
         await query.edit_message_text(text = "Internal error has occurred.\n" + msg)
 
-    roomid, msg, msg1 = DES_CBD(query.data)
+    roomid, actionid, msg, msg1, = DES_CBD(query.data)
     room = Room.from_roomid(roomid)
     if room is None:
         await query.edit_message_text(text = "This room has been destroyed.")
         await query.answer()
         return
     
+    if actionid != room.actionid:
+        await query.answer(text = "This action is either duplicated or expired.")
+        return
+
     async def start_bid(room: Room, last: Message):
+        # relating workflow should be reimplement
         await sleep(1) # telegram api limitations
         room.reset(); room.start() # a simple restart
         while type(room.user) is Room.Robot: # at least one real player
@@ -233,6 +309,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                 case Button.Start:
                     if query.from_user.id == room.owner.id:
                         if (ret:=room.start()) is True:
+                            room.roomdata = None # stop accepting any actions
                             logger.info(f"Room started: {room.id}.")
                             await query.edit_message_text(text = "This room has started.")
                             await start_bid(room, query.message)
@@ -251,6 +328,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                     pos = room.user_index(query.from_user.id)
                     last = query.message; bot = False
                     while pos == room.cur: # continue for robots
+                        room.roomdata = None # stop accepting any actions
                         if (ret:=room.bids(bid)) is True:
                             logger.info(f"User {txt} lord, {room.user.name} in room {room.id}.")
                             func = query.edit_message_text if not bot else last.reply_text
@@ -258,7 +336,10 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                             if room.lord is not False:
                                 assert(room.decide_lord(room.lord) is True) # no reason to fail here
                                 await sleep(1)
-                                await last.reply_text(f"Lord decided. Give {room.user.name} in pos:{pos+1} three cards.\n" + repr(room.lord_cards))
+                                await last.reply_text(f"Lord decided. Give {room.user.name} in pos:{room.cur+1} three cards.\n" + repr(room.lord_cards)
+                                                        ,disable_notification = True)
+                                await sleep(3)
+                                await next_play_cards(update.get_bot(), room)
                                 break
                             if room.next_bid() is False:
                                 await sleep(1)
@@ -292,78 +373,96 @@ async def inline_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         Inline query handler
         used for extended card selection
     '''
-    results = list()
     query = update.inline_query.query
     user = update.inline_query.from_user
-    room = Room.from_userid(user.id)
-
-    def result_append(result: list, id: str, title: str, chosen_text: str = None, reply_markup = None):
+    
+    results = list()
+    def result_append(title: str, chosen_text: str = None, tid: str = None, reply_markup: InlineKeyboardMarkup = None):
         chosen_text = title if chosen_text is None else chosen_text
-        results.append(InlineQueryResultArticle(id, title, InputTextMessageContent(chosen_text), reply_markup))
+        if tid is None:
+            tid = str(uuid4())
+        results.append(InlineQueryResultArticle(tid, title, InputTextMessageContent(chosen_text), reply_markup = reply_markup))
 
+    room = Room.from_userid(user.id)
     if room is None:
-        result_append(results, str(uuid4()), "You are not in any room.",
-                    "You are not in any room. Use /new to create a room or "
-                    "click the join button in other rooms to join the game.")
-        await update.inline_query.answer(results)
+        result_append("You are not in any room.",
+                    "You are not in any room. Use /new to create a room or join other rooms")
+        await update.inline_query.answer(results, 0, True)
         return
+
+    def parse_name(name: str) -> str:
+        '''
+            Disable notification of username
+        '''
+        return name.replace('@', '')
+
+    room_string = f"Room {room.id}: (state int:{room.state})\n"
+    room_string += f"Owner: {room.owner.name}, points: 501\n"
+    room_string += f"User2: {room.user1.name}, points: 501\n"
+    room_string += f"User3: {room.user2.name}, points: 501\n"
+    left_string = ''
+    left_string += f"Owner [{'LORD' if room.lord == 0 else 'FARM'}]: {room.owner.name}, cards: {room.user_cards(0).length} left\n"
+    left_string += f"User2 [{'LORD' if room.lord == 1 else 'FARM'}]: {room.user1.name}, cards: {room.user_cards(1).length} left\n"
+    left_string += f"User3 [{'LORD' if room.lord == 2 else 'FARM'}]: {room.user1.name}, cards: {room.user_cards(2).length} left\n"
 
     match room.state:
         case Room.STATE_JOINING:
-            result_append(results, str(uuid4()), "Waiting for the room owner to start game.")
+            result_append("This room has not started.")
         case Room.STATE_DECIDING:
-            result_append(results, str(uuid4()), "Waiting for the lord to be decided.")
+            result_append("The lord is being decided.", room_string)
+            result_append(cards_string(play_cards), left_string)
         case Room.STATE_PLAYING:
-            user_cards = room.all_cards(idx = room.user_index(user.id))
+            user_cards = room.user_cards(idx = room.user_index(user.id))
             if type(user_cards) is str:
-                raise InternalError(user_cards)
-            cards_result = ""
-            card_suit = {"S": "♠", "H": "♥", "C": "♣", "D": "♦"}
-            for c in user_cards.cards:
-                card = repr(c)
-                if card == 'R' or card == 'B':
-                    cards_result += card
-                else:
-                    cards_result += card[:-1] + card_suit[card[-1]]
-            if query != "" and room.cur == room.user_index(user.id):
-                query = split_cardstr(query)
-                if type(query) is not bool:
+                results.clear()
+                result_append("Internal error has occurred.", user_cards)
+            else:
+                if room.cur == room.user_index(user.id):
+                    aid = str(uuid4())[:8] # notice that data and actionid are both overridden by the last CON_CBD()
                     play_cards = Cards.from_cardlist(query, user_cards)
-                    if type(play_cards) is not bool:
-                        if room.playable(play_cards):
-                            result_append(
-                                results,
-                                CON_CBD(room.id, Operation.Play, repr(play_cards)),
-                                "Play",
-                                f"Player {user.name} played {play_cards}.",
-                                await GEN_KBD_NEXT()
-                            )
-            if room.cur == room.user_index(user.id) and room.must is False:
-                result_append(results, CON_CBD(room.id, Operation.Pass), "PASS")
-            result_append(results, str(uuid4()), cards_result, "Please type the card you want to play in the textbox.")
-    await update.inline_query.answer(results, 0)
+                    if play_cards is not False and len(play_cards) > 0 and room.playable(play_cards):
+                        result_append(
+                            f"Play {repr(play_cards)}",
+                            f"Play {cards_string(play_cards)}",
+                            tid = CON_CBD(room, Operation.Play, data = [play_cards], actionid = aid),
+                        )
+                    else:
+                        result_append(
+                            f"Illegal card combination",
+                        )
+                    if room.must is False:
+                        result_append("PASS", "Skip this round.", tid = CON_CBD(room, Operation.Pass, data = [play_cards], actionid = aid))
+                result_append(cards_string(user_cards), left_string)
+        case _:
+            result_append("Internal error has occurred.", f"Invalid room state int:{room.state} for this action.")
+    await update.inline_query.answer(results, 0, True)
 
 async def chosen_result_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     '''
         Chosen inline result handler
         used for players' operation
     '''
-    result = update.chosen_inline_result.result_id
-    if len(DES_CBD(result)) < 2:
+    userid = update.chosen_inline_result.from_user.id
+    if len(des:=DES_CBD(update.chosen_inline_result.result_id)) < 3:
         return
-    roomid, msg, msg1 = DES_CBD(result)
+    roomid, actionid, msg, _ = des
     room = Room.from_roomid(roomid)
-    if room is None:
+    roomdata = room.roomdata
+    if room is None or actionid != room.actionid or room.cur != room.user_index(userid):
+        await update.get_bot().send_message(room.chatid, f"Invalid request made by @{update.chosen_inline_result.from_user.username}.\n"
+                                                    "This incident will be reported.", disable_notification = True)
         return
+    room.roomdata = None # stop accepting any actions
     match msg:
         case Operation.Play:
-            if Cards.from_cardlist(msg1) is False:
-                return
-            room.play(Cards.from_cardlist(msg1))
+            logger.info(f"User played {repr(roomdata[1])} {room.user.name} in room {room.id}")
+            room.play(roomdata[1])
         case Operation.Pass:
-            room.next()
+            logger.info(f"User skipped {room.user.name} in room {room.id}")
+            room.play(Cards([]))
         case _:
-            pass
+            raise InternalError(f"Invalid operation ({msg}).")
+    await next_play_cards(update.get_bot(), room)
     
 
 def remove_job_if_exists(name: str, context: ContextTypes.DEFAULT_TYPE) -> bool:

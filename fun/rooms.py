@@ -1,8 +1,10 @@
+from typing import Any
 from cls.error import InternalError
 from cls.room import Room
 
 run_context_roomid: dict[str, Room] = {}
 run_context_userid: dict[int, Room] = {}
+run_context_roomdata: dict[str, list[Any]] = {}
 
 @classmethod
 def from_roomid(cls, roomid: str) -> None|Room:
@@ -21,6 +23,30 @@ def from_userid(cls, userid: int) -> None|Room:
     '''
     return run_context_userid.get(userid, None)
 Room.from_userid = from_userid
+
+@property
+def actionid(self: Room) -> None|str:
+    '''
+        get room actionid
+    '''
+    return run_context_roomdata.get(self.id, [None])[0]
+Room.actionid = actionid
+
+@property
+def roomdata(self: Room) -> None|list[Any]:
+    '''
+        get room data
+    '''
+    return run_context_roomdata.get(self.id, None)
+@roomdata.setter
+def roomdata(self: Room, roomdata: None|list[Any]) -> None:
+    '''
+        set room data
+    '''
+    if type(roomdata) is not list:
+        roomdata = [roomdata]
+    run_context_roomdata[self.id] = roomdata
+Room.roomdata = roomdata
 
 @classmethod
 def create(cls, chatid: int, owner: Room.User) -> bool|Room:

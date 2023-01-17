@@ -75,7 +75,7 @@ class Room:
             get chat id
         '''
         return self._chatid
-    
+
     @property
     def owner(self) -> User:
         '''
@@ -157,6 +157,13 @@ class Room:
         while self._deck.get_cur() != idx:
             self.next()
     
+    @property
+    def lastcur(self) -> int:
+        '''
+            get last player
+        '''
+        return self._deck.get_lastcur()
+    
     def next(self) -> None:
         '''
             move to next player
@@ -193,7 +200,7 @@ class Room:
     
     def decide_lord(self, idx: int) -> bool|str:
         '''
-            decide lord
+            decide lord and reset self.cur
             return True if succeeded, otherwise error message
         '''
         if not 0 <= idx < 3:
@@ -293,16 +300,16 @@ class Room:
         '''
             get last player's cards
         '''
-        return self._deck.get_cards(self._deck.get_lastcur())
+        return self._deck.get_cards(self.lastcur)
 
-    def all_cards(self, idx:int) -> Cards|str:  
+    def user_cards(self, idx:int) -> Cards|str:  
         '''
             get all cards in the player's hand
         '''
         if not 0 <= idx < 3:
             raise InternalError('Invalid player index int:{idx} given')
         if self.state != Room.STATE_DECIDING and self.state != Room.STATE_PLAYING:
-            return f'Room state mismatch, STATE_DECIDING | STATE_PLAYING expected, int:{self.state} found'
+            return f'Room state mismatch, STATE_DECIDING or STATE_PLAYING expected, int:{self.state} found'
         return self._deck.get_cards(idx)
 
     @property
@@ -328,4 +335,11 @@ class Room:
                 return i
         return False
 
+    @property
+    def is_first(self) -> bool:
+        '''
+            check whether current player is first player
+        '''
+        return self._deck.is_first()
+    
     

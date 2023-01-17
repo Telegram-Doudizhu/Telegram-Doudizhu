@@ -7,7 +7,7 @@ class Deck:
     '''
         Card deck
     '''
-    __slots__ = ('_tcards', '_pcards', '_cur', '_last', '_must', )
+    __slots__ = ('_tcards', '_pcards', '_cur', '_last', '_must', '_first', )
 
     # initial card deck
     deck_cardstr = '34567890JQKA2'
@@ -22,7 +22,7 @@ class Deck:
         random.seed(); random.shuffle(cards); random.shuffle(cards)
         self._tcards = Cards(cards[:3]); cards = cards[3:]
         self._pcards = [Cards(cards[:17]), Cards(cards[17:34]), Cards(cards[34:])]
-        self._cur = 0; self._last = Cards([]); self._must = 2
+        self._cur = 0; self._last = Cards([]); self._must = 2; self._first = True
 
     def get_cur(self) -> int:
         '''
@@ -65,9 +65,16 @@ class Deck:
             cur = self._cur
         return self._pcards[cur]
 
+    def is_first(self) -> bool:
+        '''
+            check whether current player is first
+        '''
+        return self._first
+
     def decide_lord(self, idx:int) -> Cards:
         '''
             allocate top cards to player lord
+            will reset self.cur
         '''
         if self.lord_decided() or not (0 <= idx < 3):
             raise InternalError('Invalid call or parameter given')
@@ -104,6 +111,7 @@ class Deck:
         '''
         if not self.lord_decided():
             raise InternalError('Lord is not decided')
+        self._first = False
         if len(cards) == 0: # skip
             self._must += 1
             if self._must == 2:
