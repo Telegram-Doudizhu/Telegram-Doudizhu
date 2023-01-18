@@ -113,12 +113,12 @@ async def GEN_KBD_DLORD(room: Room) -> InlineKeyboardMarkup:
     ]
     return InlineKeyboardMarkup(keyboard)
 
-async def GEN_KBD_PLAY() -> InlineKeyboardMarkup:
+async def GEN_KBD_PLAY(text:str = "Click to play") -> InlineKeyboardMarkup:
     '''
         Generate keyboard for next player to make choice
     '''
     keyboard = [
-        [InlineKeyboardButton("Click to play", switch_inline_query_current_chat = '')],
+        [InlineKeyboardButton(text, switch_inline_query_current_chat = '')],
     ]
     return InlineKeyboardMarkup(keyboard)
 
@@ -151,10 +151,10 @@ async def next_play_cards(bot: Bot, room: Room):
             msg += f"{room.user.name} [{'LORD' if room.lord == room.cur else 'FARM'}] pos:{room.cur+1} chose "
             if len(cards) == 0:
                 msg += 'to skip this round.'
-                logger.info(f"Robot skipped {room.user.name} in room {room.id}")
+                logger.info(f"Robot skipped pos:{room.cur} {room.user.name} in room {room.id}")
             else:
                 msg += f"{cards_string(cards)}"
-                logger.info(f"Robot played ({repr(cards)}) {room.user.name} in room {room.id}")
+                logger.info(f"Robot played ({repr(cards)}) pos:{room.cur} {room.user.name} in room {room.id}")
             await bot.send_message(room.chatid, msg)
             assert(room.play(cards) is True)
         else:
@@ -166,8 +166,8 @@ async def next_play_cards(bot: Bot, room: Room):
     loser2 = (winner + 2) % 3
     await bot.send_message(room.chatid, f"Winner determined, room base multiplier 501x\n"
                                 f"{room.users[winner].name} [{'LORD' if room.lord == winner else 'FARM'}] points += 0\n"
-                                f"{room.users[loser1].name} [{'LORD' if room.lord == loser1 else 'FARM'}] left {cards_string(room.user_cards(loser1))} points -= 0\n"
-                                f"{room.users[loser2].name} [{'LORD' if room.lord == loser2 else 'FARM'}] left {cards_string(room.user_cards(loser2))} points -= 0")
+                                f"{room.users[loser1].name} [{'LORD' if room.lord == loser1 else 'FARM'}] points -= 0\nleft cards {cards_string(room.user_cards(loser1))}\n"
+                                f"{room.users[loser2].name} [{'LORD' if room.lord == loser2 else 'FARM'}] points -= 0\nleft cards {cards_string(room.user_cards(loser2))}\n")
     await sleep(1)
     logger.info(f"Room restarted: {room.id}, last winner int:{winner}.")
     room.reset()
@@ -220,6 +220,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         # relating workflow should be reimplement
         await sleep(1) # telegram api limitations
         room.reset(); room.start() # a simple restart
+        logger.info(f'Room deck reset, id: {room.id}, cards: ({repr(room.user_cards(0))}), ({repr(room.user_cards(1))}), ({repr(room.user_cards(2))})')
         while type(room.user) is Room.Robot: # at least one real player
             await sleep(1)
             bid = await awaitify(will_robot_bid)(room)
@@ -308,7 +309,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                         if (ret:=room.start()) is True:
                             room.roomdata = None # stop accepting any actions
                             logger.info(f"Room started: {room.id}.")
-                            await query.edit_message_text(text = "This room has started.")
+                            await query.edit_message_text(text = "This room has started.", reply_markup = await GEN_KBD_PLAY("Click to view your cards"))
                             await start_bid(room, query.message)
                         else:
                             text = ret
@@ -327,20 +328,21 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                     while pos == room.cur: # continue for robots
                         room.roomdata = None # stop accepting any actions
                         if (ret:=room.bids(bid)) is True:
-                            logger.info(f"User {txt} lord, {room.user.name} in room {room.id}.")
+                            logger.info(f"User {txt} lord pos {room.cur}, {room.user.name} in room {room.id}.")
                             func = query.edit_message_text if not bot else last.reply_text
                             last = await func(text = f"{room.user.name} {txt} in this round.")
                             if room.lord is not False:
                                 assert(room.decide_lord(room.lord) is True) # no reason to fail here
                                 await sleep(1)
-                                await last.reply_text(f"Lord decided. Give {room.user.name} in pos:{room.cur+1} three cards.\n" + repr(room.lord_cards)
+                                logger.info(f"Room lord decided, id: {room.id}, pos: {room.lord}, cards: {repr(room.lord_cards)}")
+                                await last.reply_text(f"Lord decided. Give {room.user.name} in pos:{room.cur+1} three cards.\n" + cards_string(room.lord_cards)
                                                         ,disable_notification = True)
                                 await sleep(3)
                                 await next_play_cards(update.get_bot(), room)
                                 break
                             if room.next_bid() is False:
                                 await sleep(1)
-                                last = await last.reply_text("Nobody bids. Starting a new round.")
+                                last = await last.reply_text("Nobody bids. Starting a new round.", reply_markup = await GEN_KBD_PLAY("Click to view your cards"))
                                 await start_bid(room, last)
                             else:
                                 if type(room.user) is Room.Robot:
@@ -400,14 +402,19 @@ async def inline_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     left_string = ''
     left_string += f"Owner [{'LORD' if room.lord == 0 else 'FARM'}]: {room.owner.name}, cards: {room.user_cards(0).length} left\n"
     left_string += f"User2 [{'LORD' if room.lord == 1 else 'FARM'}]: {room.user1.name}, cards: {room.user_cards(1).length} left\n"
-    left_string += f"User3 [{'LORD' if room.lord == 2 else 'FARM'}]: {room.user1.name}, cards: {room.user_cards(2).length} left\n"
+    left_string += f"User3 [{'LORD' if room.lord == 2 else 'FARM'}]: {room.user2.name}, cards: {room.user_cards(2).length} left\n"
 
     match room.state:
         case Room.STATE_JOINING:
             result_append("This room has not started.")
         case Room.STATE_DECIDING:
             result_append("The lord is being decided.", room_string)
-            result_append(cards_string(play_cards), left_string)
+            user_cards = room.user_cards(idx = room.user_index(user.id))
+            if type(user_cards) is str:
+                results.clear()
+                result_append("Internal error has occurred.", user_cards)
+            else:
+                result_append(cards_string(user_cards), left_string)
         case Room.STATE_PLAYING:
             user_cards = room.user_cards(idx = room.user_index(user.id))
             if type(user_cards) is str:
@@ -433,6 +440,8 @@ async def inline_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                         )
                     if room.must is False:
                         result_append("PASS", "Skip this round.", tid = CON_CBD(room, Operation.Pass, data = [play_cards], actionid = aid))
+                else:
+                    result_append("It's not your turn yet.", left_string)
                 result_append(cards_string(user_cards), left_string)
         case _:
             result_append("Internal error has occurred.", f"Invalid room state int:{room.state} for this action.")
@@ -451,15 +460,17 @@ async def chosen_result_handler(update: Update, context: ContextTypes.DEFAULT_TY
     roomdata = room.roomdata
     if room is None or actionid != room.actionid or room.cur != room.user_index(userid):
         await update.get_bot().send_message(room.chatid, f"Invalid request made by @{update.chosen_inline_result.from_user.username}.\n"
-                                                    "This incident will be reported.", disable_notification = True)
+                                                        f"This incident will be reported.\n"
+                     "Detailed information: " + "None" if room is None else f"{actionid} != {room.actionid} or {room.cur} != {room.user_index(userid)}",
+                     disable_notification = True)
         return
     room.roomdata = None # stop accepting any actions
     match msg:
         case Operation.Play:
-            logger.info(f"User played {repr(roomdata[1])} {room.user.name} in room {room.id}")
+            logger.info(f"User played {repr(roomdata[1])} pos:{room.cur} {room.user.name} in room {room.id}")
             room.play(roomdata[1])
         case Operation.Pass:
-            logger.info(f"User skipped {room.user.name} in room {room.id}")
+            logger.info(f"User skipped pos:{room.cur} {room.user.name} in room {room.id}")
             room.play(Cards([]))
         case _:
             raise InternalError(f"Invalid operation ({msg}).")

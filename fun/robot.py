@@ -41,7 +41,7 @@ def what_robot_play(room: Room) -> Cards:
                 seq = [ctype[1], 1, 2]
                 base = ctype[2]
             if (r:= try_types(room.cards, seq, base)) is not False:
-                logger.info(f'Bot hard int:1 decided: {repr(r)}')
+                logger.info(f'Bot hard int:1 decided: {repr(r)}, room {room.id}')
                 return r
             return Cards([]) # should be all included if self.must
         case _:

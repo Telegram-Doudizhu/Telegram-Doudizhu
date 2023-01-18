@@ -86,7 +86,7 @@ def _join(self: Room, pos: int, user: Room.User|Room.Robot) -> bool|str:
     if type(user) is Room.User:
         if Room.from_userid(user.id) is not None:
             return 'You are already in a room'
-        run_context_userid[user.id] = user
+        run_context_userid[user.id] = self
     self._users[pos] = user
     return True
 Room._join = _join
