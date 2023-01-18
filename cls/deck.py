@@ -36,6 +36,12 @@ class Deck:
         '''
         return (self._cur + 2) % 3
 
+    def get_lastvcards(self) -> Cards:
+        '''
+            get last valid cards (notice: not the last player's card)
+        '''
+        return self._last
+
     def get_left(self, cur:int|None = None) -> int:
         '''
             get player left cards

@@ -16,6 +16,9 @@ logger = logging.getLogger(__name__)
 if __name__ == '__main__':
     logger.warning('TGDDZ preparing to start')
 
+    #from fun.robot import try_types
+    #print(repr(try_types(Cards.from_cardlist('33445566789990jqkkkaaa22br', Cards(Deck.deck_cards)), [9], 0)))
+
     # TODO: argparse
 
     start_bot(config.TOKEN, config.PROXY)

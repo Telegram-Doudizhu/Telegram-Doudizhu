@@ -1,4 +1,5 @@
 from uuid import uuid4
+from random import randint
 from cls.error import InternalError
 from cls.cards import Cards
 from cls.deck import Deck
@@ -7,7 +8,7 @@ class Room:
     '''
         A room in the game.
     '''
-    __slots__ = ('_id', '_chatid', '_state', '_users', '_deck', '_bids', '_bidcount', '_lordcard', )
+    __slots__ = ('_id', '_chatid', '_state', '_users', '_deck', '_bids', '_bidcount', '_lordcard', '_lastplayed', )
     
     (
         STATE_CREATE,  # should not appear
@@ -35,9 +36,9 @@ class Room:
     class Robot:
         __slots__ = ('_hard', )
         
-        hard_list = ('Stupid', 'Easy', 'Hard', 'Hell', )
+        hard_list = ('Placeholder', 'Stupid', )
         
-        def __init__(self, hard:int = 0):
+        def __init__(self, hard:int = -1):
             self._hard = hard
         
         @property
@@ -61,6 +62,8 @@ class Room:
         self._deck = Deck()
         self._bids = [0, 0, 0]
         self._bidcount = 0
+        self._lordcard = None
+        self._lastplayed = Cards([])
     
     @property
     def id(self) -> str:
@@ -128,6 +131,7 @@ class Room:
         if self.user1 is None or self.user2 is None:
             return 'Not enough players'
         self.state = Room.STATE_DECIDING
+        self.cur = randint(0, 2) # randomly choose a beginner
         return True
     
     def reset(self) -> None:
@@ -138,6 +142,8 @@ class Room:
         self._deck = Deck()
         self._bids = [0, 0, 0]
         self._bidcount = 0
+        self._lordcard = None
+        self._lastplayed = Cards([])
         self.state = Room.STATE_JOINING
 
     @property
@@ -286,6 +292,7 @@ class Room:
         if not self._deck.check_playable(cards):
             return 'Unplayable cards'
         self._deck.do_play(cards)
+        self._lastplayed = cards
         return True
     
     @property
@@ -301,6 +308,20 @@ class Room:
             get last player's cards
         '''
         return self._deck.get_cards(self.lastcur)
+
+    @property
+    def lastvcards(self) -> Cards:
+        '''
+            get last valid played cards (notice: not last player's cards)
+        '''
+        return self._deck.get_lastvcards()
+
+    @property
+    def lastplayed(self) -> Cards:
+        '''
+            get last played cards
+        '''
+        return self._lastplayed
 
     def user_cards(self, idx:int) -> Cards|str:  
         '''

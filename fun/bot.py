@@ -1,17 +1,13 @@
-from pickle import NONE
 from uuid import uuid4
 from asyncio import sleep
 from functools import wraps
 from cls.error import InternalError
+from cls.cards import Cards
 from cls.room import Room
 from fun.rooms import *
 from fun.robot import *
-from cls.cards import Cards
-from fun.cards import split_cardstr
 
 import logging
-
-from fun.rooms import roomdata
 logger = logging.getLogger(__name__)
 
 from telegram import Bot, Message, Update, InlineKeyboardButton, InlineKeyboardMarkup, InputTextMessageContent
@@ -150,7 +146,7 @@ async def next_play_cards(bot: Bot, room: Room):
         if not room.is_first:
             msg += f"Last player pos:{room.lastcur+1} has {room.lastcards.length} cards left.\n"
         if type(room.users[room.cur]) is Room.Robot:
-            cards = what_robot_play(room)
+            cards = await awaitify(what_robot_play)(room)
             assert(room.playable(cards))
             msg += f"{room.user.name} [{'LORD' if room.lord == room.cur else 'FARM'}] pos:{room.cur+1} chose "
             if len(cards) == 0:
@@ -168,9 +164,10 @@ async def next_play_cards(bot: Bot, room: Room):
     winner = room.win
     loser1 = (winner + 1) % 3
     loser2 = (winner + 2) % 3
-    await bot.send_message(room.chatid, f"Winner determined, {room.users[winner].name} [{'LORD' if room.lord == winner else 'FARM'}] points += 0\n"
-                                f"{room.users[loser1].name} [{'LORD' if room.lord == loser1 else 'FARM'}] points -= 0\n"
-                                f"{room.users[loser2].name} [{'LORD' if room.lord == loser2 else 'FARM'}] points -= 0")
+    await bot.send_message(room.chatid, f"Winner determined, room base multiplier 501x\n"
+                                f"{room.users[winner].name} [{'LORD' if room.lord == winner else 'FARM'}] points += 0\n"
+                                f"{room.users[loser1].name} [{'LORD' if room.lord == loser1 else 'FARM'}] left {cards_string(room.user_cards(loser1))} points -= 0\n"
+                                f"{room.users[loser2].name} [{'LORD' if room.lord == loser2 else 'FARM'}] left {cards_string(room.user_cards(loser2))} points -= 0")
     await sleep(1)
     logger.info(f"Room restarted: {room.id}, last winner int:{winner}.")
     room.reset()
@@ -225,7 +222,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         room.reset(); room.start() # a simple restart
         while type(room.user) is Room.Robot: # at least one real player
             await sleep(1)
-            bid = will_robot_bid(room)
+            bid = await awaitify(will_robot_bid)(room)
             txt = "bidded" if bid else "passed"
             assert(room.bids(bid) is True) # no reason to fail here
             logger.info(f"User {txt} lord, {room.user.name} in room {room.id}.")
@@ -347,7 +344,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                                 await start_bid(room, last)
                             else:
                                 if type(room.user) is Room.Robot:
-                                    bid = will_robot_bid(room)
+                                    bid = await awaitify(will_robot_bid)(room)
                                     txt = "bidded" if bid else "passed"
                                     pos = room.cur
                                     bot = True
@@ -383,7 +380,7 @@ async def inline_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             tid = str(uuid4())
         results.append(InlineQueryResultArticle(tid, title, InputTextMessageContent(chosen_text), reply_markup = reply_markup))
 
-    room = Room.from_userid(user.id)
+    room:Room = Room.from_userid(user.id)
     if room is None:
         result_append("You are not in any room.",
                     "You are not in any room. Use /new to create a room or join other rooms")
@@ -420,15 +417,19 @@ async def inline_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 if room.cur == room.user_index(user.id):
                     aid = str(uuid4())[:8] # notice that data and actionid are both overridden by the last CON_CBD()
                     play_cards = Cards.from_cardlist(query, user_cards)
-                    if play_cards is not False and len(play_cards) > 0 and room.playable(play_cards):
-                        result_append(
-                            f"Play {repr(play_cards)}",
-                            f"Play {cards_string(play_cards)}",
-                            tid = CON_CBD(room, Operation.Play, data = [play_cards], actionid = aid),
-                        )
+                    if len(query.strip()) == 0:
+                        if room.lastplayed.length == 0:
+                            if room.lastvcards.length != 0:
+                                result_append(f"Last last played: {repr(room.lastvcards)}", f"Last last played: {cards_string(room.lastvcards)}")
+                        else:
+                            result_append(f"Last played: {repr(room.lastplayed)}", f"Last played: {cards_string(room.lastplayed)}")
+                    elif play_cards is False or len(play_cards) == 0 or not room.playable(play_cards):
+                        result_append(f"Illegal card combination")
                     else:
                         result_append(
-                            f"Illegal card combination",
+                            f"PLAY {repr(play_cards)}",
+                            f"Play {cards_string(play_cards)}",
+                            tid = CON_CBD(room, Operation.Play, data = [play_cards], actionid = aid),
                         )
                     if room.must is False:
                         result_append("PASS", "Skip this round.", tid = CON_CBD(room, Operation.Pass, data = [play_cards], actionid = aid))

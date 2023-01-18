@@ -42,20 +42,41 @@ class Cards:
         if len(cards) < 2:
             raise InternalError('Cards not enough')
         for i in range(1, min(cnt, len(cards))):
-            # includes K A ; excludes A 2
+            # includes K A ; excludes A 2; excludes B R
             if int(cards[i-1])+1 != int(cards[i]) \
                  and not (str(cards[i-1])=='K' and str(cards[i])=='A') \
-                 or (str(cards[i-1])=='A' and str(cards[i])=='2'):
+                 or (str(cards[i-1])=='A' and str(cards[i])=='2') \
+                 or (str(cards[i])=='B' or str(cards[i])=='R'):
                 return False
         return True
 
-    def _get_type(self) -> list[int, int, Card|int]:
+    def get_type(self) -> list[int, int, Card|int]:
         '''
             get card combination type, return [level, type, base]
             level: 0->Illegal, 1->Normal, 2->Bomb, 3->KingBomb
             base: first card of combination (including single)
             type:
-        
+                0 -> illegal
+                1 -> normal bomb
+                2 -> king bomb
+                3 -> single
+                4 -> double
+                5 -> triple
+                6 -> triple+1
+                7 -> triple+double
+                8 -> 2*triple~
+                9 -> 2*(triple~+1)
+                10 -> 2*(triple~+double)
+                11 -> 3*triple~
+                12 -> 3*(triple~+1)
+                13 -> 3*(triple~+double)
+                14 -> 4*triple~
+                15 -> 4*(triple~+1)
+                16 -> 4*(triple~+double)
+                17 -> quadriple+2*single
+                18 -> quadriple+double
+                19+ -> ~
+                27+ -> ~~
         '''
         cards,lc = self._cards,len(self._cards)
         if lc == 0: return [0, 0, 0] # empty or invalid
@@ -123,7 +144,7 @@ class Cards:
         '''
             compare cards
         '''
-        t1,t2 = self._get_type(),other._get_type()
+        t1,t2 = self.get_type(),other.get_type()
         match t1[0] - t2[0]:
             case -3|-2|-1:
                 return True
@@ -131,7 +152,7 @@ class Cards:
                 return False
         return t1[1] == t2[1] and int(t1[2]) < int(t2[2])
 
-    def do_remove(self, cards: Self|list[Card]) -> None:
+    def do_remove(self, cards: Self|list[Card]) -> Self:
         '''
             remove cards
         '''
@@ -146,8 +167,9 @@ class Cards:
                 self._cards.remove(card)
             except ValueError:
                 raise InternalError('Card not found')
+        return self
 
-    def do_add(self, cards: Self|list[Card]) -> None:
+    def do_add(self, cards: Self|list[Card]) -> Self:
         '''
             add new cards
         '''
@@ -159,6 +181,7 @@ class Cards:
             raise InternalError('Invalid parameter type')
         self._cards.extend(cards)
         self._cards.sort()
+        return self
     
     @property
     def cards(self) -> list[Card]:
@@ -224,8 +247,6 @@ class Cards:
         '''
             rewrite [] by index
         '''
-        if not (0 <= idx < len(self._cards)):
-            raise InternalError('Invalid card index')
         return self._cards[idx]
 
     def __len__(self):
@@ -233,3 +254,9 @@ class Cards:
             rewrite len()
         '''
         return len(self._cards)
+
+    def __iter__(self):
+        '''
+            rewrite iter()
+        '''
+        return iter(self._cards)
