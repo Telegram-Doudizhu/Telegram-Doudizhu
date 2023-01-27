@@ -127,6 +127,8 @@ def cards_string(cards: Cards) -> str:
     '''
         Generate a more readable cards string
     '''
+    if type(cards) is not Cards:
+        cards = Cards(cards)
     suit = {"S": "♠", "H": "♥", "C": "♣", "D": "♦"}
     cards_str = repr(cards)
     for k, v in suit.items():
@@ -144,7 +146,10 @@ async def next_play_cards(bot: Bot, room: Room):
             break
         msg = ''
         if not room.is_first:
-            msg += f"Last player pos:{room.lastcur+1} has {room.lastcards.length} cards left.\n"
+            if room.lastplayed.multiplier > 1:
+                room.multiplier *= room.lastplayed.multiplier
+                msg += f"Bomb! Room multiplier * {room.lastplayed.multiplier} => {room.multiplier}x\n"
+            msg += f"Last player pos:{room.lastcur+1} has {room.lastcards.length} cards left.\n\n"
         if type(room.users[room.cur]) is Room.Robot:
             cards = await awaitify(what_robot_play)(room)
             assert(room.playable(cards))
@@ -164,12 +169,12 @@ async def next_play_cards(bot: Bot, room: Room):
     winner = room.win
     loser1 = (winner + 1) % 3
     loser2 = (winner + 2) % 3
-    await bot.send_message(room.chatid, f"Winner determined, room base multiplier 501x\n"
+    await bot.send_message(room.chatid, f"Winner pos:{winner}, room multiplier {room.multiplier}x\n"
                                 f"{room.users[winner].name} [{'LORD' if room.lord == winner else 'FARM'}] points += 0\n"
                                 f"{room.users[loser1].name} [{'LORD' if room.lord == loser1 else 'FARM'}] points -= 0\nleft cards {cards_string(room.user_cards(loser1))}\n"
                                 f"{room.users[loser2].name} [{'LORD' if room.lord == loser2 else 'FARM'}] points -= 0\nleft cards {cards_string(room.user_cards(loser2))}\n")
     await sleep(1)
-    logger.info(f"Room restarted: {room.id}, last winner int:{winner}.")
+    logger.info(f"Room restarted: {room.id}, last winner int:{winner}, mut: {room.multiplier}.")
     room.reset()
     await bot.send_message(room.chatid, "A new room has been created for you.", reply_markup = await GEN_KBD(room))
 
@@ -227,7 +232,9 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             txt = "bidded" if bid else "passed"
             assert(room.bids(bid) is True) # no reason to fail here
             logger.info(f"User {txt} lord, {room.user.name} in room {room.id}.")
-            last = await last.reply_text(text = f"{room.user.name} {txt} in this round.") 
+            room.multiplier *= (2 if bid is True else 1)
+            muts = f"\nRoom multiplier * 2 => {room.multiplier}x" if bid is True else ""
+            last = await last.reply_text(text = f"{room.user.name} {txt} in this round." + muts)
             assert(room.next_bid() is True) # no reason to fail here
         markup = await GEN_KBD_DLORD(room)
         await last.reply_text(f"{room.user.name}, make your choice:", reply_markup = markup)
@@ -329,12 +336,14 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                         room.roomdata = None # stop accepting any actions
                         if (ret:=room.bids(bid)) is True:
                             logger.info(f"User {txt} lord pos {room.cur}, {room.user.name} in room {room.id}.")
+                            room.multiplier *= (2 if bid is True else 1)
+                            muts = f"\nRoom multiplier * 2 => {room.multiplier}x" if bid is True else ""
                             func = query.edit_message_text if not bot else last.reply_text
-                            last = await func(text = f"{room.user.name} {txt} in this round.")
+                            last = await func(text = f"{room.user.name} {txt} in this round." + muts)
                             if room.lord is not False:
                                 assert(room.decide_lord(room.lord) is True) # no reason to fail here
                                 await sleep(1)
-                                logger.info(f"Room lord decided, id: {room.id}, pos: {room.lord}, cards: {repr(room.lord_cards)}")
+                                logger.info(f"Room lord decided, id: {room.id}, pos: {room.lord}, cards: {repr(room.lord_cards)}, mul: {room.multiplier}")
                                 await last.reply_text(f"Lord decided. Give {room.user.name} in pos:{room.cur+1} three cards.\n" + cards_string(room.lord_cards)
                                                         ,disable_notification = True)
                                 await sleep(3)
@@ -396,10 +405,11 @@ async def inline_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return name.replace('@', '')
 
     room_string = f"Room {room.id}: (state int:{room.state})\n"
+    room_string += f"Room multiplier: {room.multiplier}x\n"
     room_string += f"Owner: {room.owner.name}, points: 501\n"
     room_string += f"User2: {room.user1.name}, points: 501\n"
     room_string += f"User3: {room.user2.name}, points: 501\n"
-    left_string = ''
+    left_string = f"Room multiplier: {room.multiplier}x\n"
     left_string += f"Owner [{'LORD' if room.lord == 0 else 'FARM'}]: {room.owner.name}, cards: {room.user_cards(0).length} left\n"
     left_string += f"User2 [{'LORD' if room.lord == 1 else 'FARM'}]: {room.user1.name}, cards: {room.user_cards(1).length} left\n"
     left_string += f"User3 [{'LORD' if room.lord == 2 else 'FARM'}]: {room.user2.name}, cards: {room.user_cards(2).length} left\n"
@@ -414,7 +424,11 @@ async def inline_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 results.clear()
                 result_append("Internal error has occurred.", user_cards)
             else:
-                result_append(cards_string(user_cards), left_string)
+                if len(user_cards) <= 10:
+                    result_append(cards_string(user_cards), left_string)
+                else:
+                    result_append(cards_string(user_cards[:10]), left_string)
+                    result_append(cards_string(user_cards[10:]), left_string)
         case Room.STATE_PLAYING:
             user_cards = room.user_cards(idx = room.user_index(user.id))
             if type(user_cards) is str:
@@ -442,7 +456,11 @@ async def inline_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                         result_append("PASS", "Skip this round.", tid = CON_CBD(room, Operation.Pass, data = [play_cards], actionid = aid))
                 else:
                     result_append("It's not your turn yet.", left_string)
-                result_append(cards_string(user_cards), left_string)
+                if len(user_cards) <= 10:
+                    result_append(cards_string(user_cards), left_string)
+                else:
+                    result_append(cards_string(user_cards[:10]), left_string)
+                    result_append(cards_string(user_cards[10:]), left_string)
         case _:
             result_append("Internal error has occurred.", f"Invalid room state int:{room.state} for this action.")
     await update.inline_query.answer(results, 0, True)
@@ -459,9 +477,9 @@ async def chosen_result_handler(update: Update, context: ContextTypes.DEFAULT_TY
     room = Room.from_roomid(roomid)
     roomdata = room.roomdata
     if room is None or actionid != room.actionid or room.cur != room.user_index(userid):
-        await update.get_bot().send_message(room.chatid, f"Invalid request made by @{update.chosen_inline_result.from_user.username}.\n"
-                                                        f"This incident will be reported.\n"
-                     "Detailed information: " + "None" if room is None else f"{actionid} != {room.actionid} or {room.cur} != {room.user_index(userid)}",
+        await update.get_bot().send_message(room.chatid, f"Invalid request made by @{update.chosen_inline_result.from_user.username}.\n" +
+                                                        f"This incident will be reported.\n" +
+                     "Detailed information: " + ("None" if room is None else f"{actionid} != {room.actionid} or {room.cur} != {room.user_index(userid)}"),
                      disable_notification = True)
         return
     room.roomdata = None # stop accepting any actions

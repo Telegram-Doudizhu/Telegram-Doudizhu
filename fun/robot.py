@@ -1,3 +1,4 @@
+from pickle import FALSE
 import random
 from cls.error import InternalError
 from cls.card import Card
@@ -51,6 +52,7 @@ def what_robot_play(room: Room) -> Cards:
 def try_types(cards: Cards, types: list, base: int|Card) -> bool|Cards:
     '''
         check whether cards can be played with any of given types respectively
+        base = 0 for no limits
     '''
     for t in types:
         if (r:= find_by_type(cards, t, base)) is not False:
@@ -119,10 +121,17 @@ def find_by_type(cards: Cards, type: int, base: int|Card) -> bool|Cards:
                 return Cards(r)
         case 3:
             if len(r:= _filter(cmp, spt[1])) > 0:
-                return Cards([r[0]])
+                if r[0].is_king and int(base) == 0 and len(spt[2]) > 0:
+                    return False # fallback to double
+                else:
+                   Cards([r[0]])
+            if len(cards) <= 2 and len(r:= _filter(cmp, spt[2])) > 0:
+                return Cards([spt[2][0]])
         case 4:
             if len(r:= _filter(cmp, spt[2])) > 0:
                 return Cards(_filter(equ(r[0]), cards))
+            if len(cards) <= 3 and len(r:= _filter(cmp, spt[3])) > 0:
+                return Cards(_filter(equ(spt[3][0]), cards)[:2])
         case 5:
             if len(r:= _filter(cmp, spt[3])) > 0:
                 return Cards(_filter(equ(r[0]), cards))

@@ -8,7 +8,7 @@ class Room:
     '''
         A room in the game.
     '''
-    __slots__ = ('_id', '_chatid', '_state', '_users', '_deck', '_bids', '_bidcount', '_lordcard', '_lastplayed', )
+    __slots__ = ('_id', '_chatid', '_state', '_users', '_deck', '_bids', '_bidcount', '_lordcard', '_lastplayed', 'multiplier', )
     
     (
         STATE_CREATE,  # should not appear
@@ -64,6 +64,7 @@ class Room:
         self._bidcount = 0
         self._lordcard = None
         self._lastplayed = Cards([])
+        self.multiplier = 1 # controller outside
     
     @property
     def id(self) -> str:
@@ -145,6 +146,7 @@ class Room:
         self._lordcard = None
         self._lastplayed = Cards([])
         self.state = Room.STATE_JOINING
+        self.multiplier = 1 # controller outside
 
     @property
     def cur(self) -> int:
@@ -363,4 +365,5 @@ class Room:
         '''
         return self._deck.is_first()
     
+
     

@@ -140,6 +140,13 @@ class Cards:
                 return [1, 27+lc//2-3, spt[2][0]] # ~~
         return [0, 0, 0] # empty or invalid
 
+    @property
+    def multiplier(self) -> int:
+        '''
+            get multiplier of card combination
+        '''
+        return [0, 1, 2, 2][self.get_type()[0]]
+
     def __lt__(self, other: Self):
         '''
             compare cards
