@@ -37,6 +37,19 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     '''
     await update.message.reply_text("Use /start to test this bot.")
 
+async def kill_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    '''
+        Kill command handler
+        forcely close current room
+    '''
+    room:Room = Room.from_userid(update.effective_user.id)
+    if room is None:
+        await update.message.reply_text("You are not in any room.")
+        return
+    logger.info(f"Room killed: {room.id}, by: {room.users[room.user_index(update.effective_user.id)].name}")
+    await update.message.reply_text(f"Room killed, id: {room.id}.")
+    room.destroy(); del room
+
 
 # buttons for callback query
 class Button:
@@ -191,7 +204,7 @@ async def new_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             - settings: trigger /settings inline query
             - start: start the game (available when three players joined)
     '''
-    room = Room.create(update.message.chat_id, Room.User(update.effective_user.id, f"User @{update.effective_user.username}"))
+    room:Room = Room.create(update.message.chat_id, Room.User(update.effective_user.id, f"User @{update.effective_user.username}"))
     if room is False:
         await update.message.reply_text("You are already in a room.")
         return
@@ -211,7 +224,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await query.edit_message_text(text = "Internal error has occurred.\n" + msg)
 
     roomid, actionid, msg, msg1, = DES_CBD(query.data)
-    room = Room.from_roomid(roomid)
+    room:Room = Room.from_roomid(roomid)
     if room is None:
         await query.edit_message_text(text = "This room has been destroyed.")
         await query.answer()
@@ -474,7 +487,7 @@ async def chosen_result_handler(update: Update, context: ContextTypes.DEFAULT_TY
     if len(des:=DES_CBD(update.chosen_inline_result.result_id)) < 3:
         return
     roomid, actionid, msg, _ = des
-    room = Room.from_roomid(roomid)
+    room:Room = Room.from_roomid(roomid)
     roomdata = room.roomdata
     if room is None or actionid != room.actionid or room.cur != room.user_index(userid):
         await update.get_bot().send_message(room.chatid, f"Invalid request made by @{update.chosen_inline_result.from_user.username}.\n" +
@@ -536,6 +549,7 @@ def start_bot(token:str, proxy:str = '') -> None:
 
     app.add_handler(CommandHandler("start", start_command))
     app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("kill", kill_command))
     app.add_handler(CommandHandler("new", new_command))
     app.add_handler(CallbackQueryHandler(callback_handler))
     app.add_handler(InlineQueryHandler(inline_handler))
