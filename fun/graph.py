@@ -5,6 +5,10 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 original_cards: dict[str, bytes] = {}
 
 def generate_card(card: str) -> bytes:
+    '''
+        generate a card image by card string like "3S", "B"
+        return the image in bytes
+    '''
     im = Image.new("RGBA", (220, 320), "#FFFFFF00")
     if card == "B" or card == "R":
         color = "Black" if card == "B" else "Red"
@@ -42,6 +46,10 @@ def generate_card(card: str) -> bytes:
     return im.tobytes()
 
 def draw_cards(cards: Cards) -> bytes:
+    '''
+        generate cards image by cards
+        return the image in bytes
+    '''
     card_list, corner = cards.cards, 0
     ret = Image.new("RGBA", (220 + (cards.length - 1) * 68, 320), "#FFFFFF00")
     for card in card_list:
@@ -50,6 +58,12 @@ def draw_cards(cards: Cards) -> bytes:
     return ret.tobytes()
 
 def graph_init() -> None:
+    '''
+        initialization function for card drawing
+        needs to be run before using other functions
+        if the data in './images' folder is missing
+        the initialization will redraw and save missing cards
+    '''
     cards = [Card(c, j) for c in "34567890JQKA2" for j in range(4)]
     cards.extend([Card("B"), Card("R")])
     for card in cards:
@@ -59,4 +73,4 @@ def graph_init() -> None:
         except IOError:
             original_cards[repr(card)] = generate_card(repr(card))
 
-__all__ = ()
+__all__ = ('graph_init', 'draw_cards', )
