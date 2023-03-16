@@ -6,6 +6,7 @@ from cls.cards import Cards
 from cls.room import Room
 from fun.rooms import *
 from fun.robot import *
+from cls.user import User
 
 import logging
 logger = logging.getLogger(__name__)
@@ -50,6 +51,13 @@ async def kill_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await update.message.reply_text(f"Room killed, id: {room.id}.")
     room.destroy(); del room
 
+async def info_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    '''
+        Info command handler
+        show detailed info of user
+    '''
+    user = User(update.effective_user.id)
+    await update.message.reply_text("User info:\n" + '\n'.join([f'{k}: {v}' for k, v in user.getall().items()]))
 
 # buttons for callback query
 class Button:
@@ -551,6 +559,7 @@ def start_bot(token:str, proxy:str = '') -> None:
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("kill", kill_command))
     app.add_handler(CommandHandler("new", new_command))
+    app.add_handler(CommandHandler("info", info_command))
     app.add_handler(CallbackQueryHandler(callback_handler))
     app.add_handler(InlineQueryHandler(inline_handler))
     app.add_handler(ChosenInlineResultHandler(chosen_result_handler))
