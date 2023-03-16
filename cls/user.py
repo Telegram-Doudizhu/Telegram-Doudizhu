@@ -1,5 +1,7 @@
 import sqlite3
 
+db = sqlite3.connect('users.db')
+db_cur = db.cursor()
 class User:
     '''
         A single user
@@ -12,8 +14,8 @@ class User:
         self._win = 0
         self._played = 0
 
-        self._db = sqlite3.connect('users.db')
-        self._cur = self._db.cursor()
+        self._db = db
+        self._cur = db_cur
 
         self._create_table()
 
@@ -64,6 +66,8 @@ class User:
     @beans.setter
     def beans(self, value: int):
         self._beans = value
+        self._cur.execute("UPDATE users SET beans=? WHERE id=?", (self._beans, self._id))
+        self._db.commit()
 
     @property
     def win(self) -> int:
@@ -74,6 +78,8 @@ class User:
     @win.setter
     def win(self, value: int):
         self._win = value
+        self._cur.execute("UPDATE users SET win=? WHERE id=?", (self._win, self._id))
+        self._db.commit()
 
     @property
     def played(self) -> int:
@@ -84,16 +90,5 @@ class User:
     @played.setter
     def played(self, value: int):
         self._played = value
-
-    def _update_user_data(self, beans: int = None, win: int = None, played: int = None) -> None:
-        '''
-            update user's data in database
-        '''
-        if beans is not None:
-            self._beans = beans
-        if win is not None:
-            self._win = win
-        if played is not None:
-            self._played = played
-        self._cur.execute("UPDATE users SET beans=?, win=?, played=? WHERE id=?", (self._beans, self._win, self._played, self._id))
+        self._cur.execute("UPDATE users SET played=? WHERE id=?", (self._played, self._id))
         self._db.commit()
