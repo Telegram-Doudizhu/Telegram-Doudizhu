@@ -35,7 +35,7 @@ def what_robot_play(room: Room) -> Cards:
             return Cards([])
         case 1:
             if room.must:
-                seq = [*range(34, 27, -1), *range(26, 19, -1), 15, 16, 12, 13, 9, 10, 6, 7, 14, 11, 8, 5, 3, 4, 18, 17, 1, 2]
+                seq = [*range(34, 27, -1), *range(26, 19, -1), 15, 16, 12, 13, 9, 10, 6, 7, 14, 11, 8, 5, 4, 3, 18, 17, 1, 2]
                 base = 0
             else:
                 ctype = room.lastvcards.get_type()
@@ -124,7 +124,7 @@ def find_by_type(cards: Cards, type: int, base: int|Card) -> bool|Cards:
                 if r[0].is_king and int(base) == 0 and len(spt[2]) > 0:
                     return False # fallback to double
                 else:
-                   Cards([r[0]])
+                   return Cards([r[0]])
             if len(cards) <= 2 and len(r:= _filter(cmp, spt[2])) > 0:
                 return Cards([spt[2][0]])
         case 4:
